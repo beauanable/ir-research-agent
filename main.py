@@ -43,11 +43,9 @@ papers_processed = 0
 
 for paper in data["results"]:
 
-    journal = (
-        paper.get("primary_location", {})
-        .get("source", {})
-        .get("display_name", "")
-    )
+    primary_location = paper.get("primary_location") or {}
+    source = primary_location.get("source") or {}
+    journal = source.get("display_name", "")
 
     if journal not in TOP_JOURNALS:
         continue
