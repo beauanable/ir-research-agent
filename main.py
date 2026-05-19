@@ -195,7 +195,7 @@ def fetch_papers_for_search(search_term):
         "filter": "from_publication_date:2024-01-01",
         "search": search_term,
         "sort": "cited_by_count:desc",
-        "per-page": 25,
+        "per-page": 50,
     }
 
     response = requests.get(OPENALEX_URL, params=params)
@@ -278,7 +278,12 @@ for paper in ranked_papers:
     if unique_id and unique_id not in seen_papers:
         new_ranked_papers.append(paper)
 
-selected_papers = new_ranked_papers[:10]
+print(f"Total papers found: {len(all_papers)}")
+print(f"Deduped papers: {len(deduped_papers)}")
+print(f"Seen papers loaded: {len(seen_papers)}")
+print(f"New papers after seen filter: {len(new_ranked_papers)}")
+
+selected_papers = new_ranked_papers[:8]
 
 email_content = """
 <html>
