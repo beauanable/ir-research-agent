@@ -413,6 +413,8 @@ email_content += """
 </html>
 """
 
+save_seen_papers(seen_papers)
+
 sender = os.environ["EMAIL_ADDRESS"]
 password = os.environ["EMAIL_PASSWORD"]
 
