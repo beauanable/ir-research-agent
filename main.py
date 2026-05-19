@@ -20,6 +20,16 @@ SEARCH_TERMS = [
     "state capacity international relations",
     "great power competition",
     "critical infrastructure security",
+    "compute power geopolitics",
+    "data center geopolitics",
+    "semiconductor supply chains",
+    "AI infrastructure geopolitics",
+    "energy infrastructure great power competition",
+    "electric grid security geopolitics",
+    "critical minerals geopolitics",
+    "industrial policy semiconductors",
+    "cloud computing national security",
+    "strategic autonomy technology",
 ]
 
 CORE_IR_JOURNALS = [
@@ -65,6 +75,26 @@ STRATEGIC_KEYWORDS = [
     "national security",
     "energy security",
     "infrastructure resilience",
+    "compute power",
+    "data center",
+    "data centers",
+    "semiconductor",
+    "semiconductors",
+    "chip supply chain",
+    "semiconductor supply chain",
+    "critical minerals",
+    "electric grid",
+    "grid resilience",
+    "grid security",
+    "cloud infrastructure",
+    "cloud computing",
+    "technology competition",
+    "technology strategy",
+    "dual-use technology",
+    "strategic technology",
+    "energy geopolitics",
+    "energy statecraft",
+    "infrastructure geopolitics",
 ]
 
 GENERAL_IR_KEYWORDS = [
