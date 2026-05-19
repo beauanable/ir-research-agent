@@ -266,7 +266,17 @@ ranked_papers = sorted(
     reverse=True,
 )
 
-selected_papers = ranked_papers[:10]
+seen_papers = load_seen_papers()
+
+new_ranked_papers = []
+
+for paper in ranked_papers:
+    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
+
+    if unique_id not in seen_papers:
+        new_ranked_papers.append(paper)
+
+selected_papers = new_ranked_papers[:10]
 
 email_content = """
 <html>
