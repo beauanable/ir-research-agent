@@ -195,7 +195,7 @@ def fetch_papers_for_search(search_term):
         "filter": "from_publication_date:2024-01-01",
         "search": search_term,
         "sort": "cited_by_count:desc",
-        "per-page": 50,
+        "per-page": 100,
     }
 
     response = requests.get(OPENALEX_URL, params=params)
