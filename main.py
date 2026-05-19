@@ -121,6 +121,25 @@ STRATEGIC_KEYWORDS = [
     "infrastructure geopolitics",
 ]
 
+TECHNICAL_PENALTY_KEYWORDS = [
+    "algorithm",
+    "neural network",
+    "machine learning model",
+    "deep learning",
+    "cloud architecture",
+    "database",
+    "data management",
+    "software engineering",
+    "edge computing",
+    "internet of things",
+    "iot",
+    "smart city",
+    "digital twin",
+    "healthcare",
+    "medical",
+    "clinical",
+]
+
 GENERAL_IR_KEYWORDS = [
     "alliance",
     "war",
@@ -224,6 +243,9 @@ def score_paper(paper, search_term):
     score += min(cited_by_count, 100) / 5
     score += strategic_score
     score += ir_score
+    for keyword in TECHNICAL_PENALTY_KEYWORDS:
+        if keyword in combined_text.lower():
+            score -= 15
 
     for term_word in search_term.lower().split():
         if term_word in combined_text.lower():
