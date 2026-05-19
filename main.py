@@ -50,6 +50,30 @@ CORE_IR_JOURNALS = [
     "Journal of Strategic Studies",
 ]
 
+TIER_1_JOURNALS = [
+    "International Organization",
+    "International Security",
+    "World Politics",
+    "International Studies Quarterly",
+]
+
+TIER_2_JOURNALS = [
+    "European Journal of International Relations",
+    "Review of International Political Economy",
+    "Security Studies",
+    "Journal of Conflict Resolution",
+    "International Affairs",
+    "Journal of Strategic Studies",
+]
+
+TIER_3_JOURNALS = [
+    "Foreign Affairs",
+    "Foreign Policy",
+    "Foreign Policy Analysis",
+    "Survival",
+    "The Washington Quarterly",
+]
+
 STRATEGIC_KEYWORDS = [
     "great power competition",
     "strategic competition",
@@ -178,8 +202,17 @@ def score_paper(paper, search_term):
     strategic_score = calculate_strategic_score(combined_text)
     ir_score = calculate_ir_score(combined_text)
 
-    if journal in CORE_IR_JOURNALS:
-        score += 40
+    if journal in TIER_1_JOURNALS:
+        score += 60
+
+    elif journal in TIER_2_JOURNALS:
+        score += 45
+
+    elif journal in TIER_3_JOURNALS:
+        score += 30
+
+    elif journal in CORE_IR_JOURNALS:
+        score += 20
 
     if year >= 2026:
         score += 20
