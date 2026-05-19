@@ -11,13 +11,10 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 url = "https://api.openalex.org/works"
 
 params = {
-    "filter": ",".join([
-        "from_publication_date:2026-01-01",
-        "primary_location.source.display_name.search:International",
-    ]),
-    "search": "AI geopolitics OR political economy OR security OR deterrence OR infrastructure OR state capacity",
+    "filter": "from_publication_date:2026-01-01",
+    "search": "international relations AI geopolitics political economy security deterrence infrastructure state capacity",
     "sort": "cited_by_count:desc",
-    "per-page": 10
+    "per-page": 25
 }
 
 response = requests.get(url, params=params)
