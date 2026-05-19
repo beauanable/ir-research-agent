@@ -11,10 +11,10 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 url = "https://api.openalex.org/works"
 
 params = {
-    "filter": "from_publication_date:2026-01-01",
+    "filter": "from_publication_date:2025-01-01",
     "search": "international relations AI geopolitics political economy security deterrence infrastructure state capacity",
     "sort": "cited_by_count:desc",
-    "per-page": 25
+    "per-page": 100
 }
 
 response = requests.get(url, params=params)
@@ -47,7 +47,7 @@ for paper in data["results"]:
     source = primary_location.get("source") or {}
     journal = source.get("display_name", "")
 
-    if journal not in TOP_JOURNALS:
+    if journal and journal not in TOP_JOURNALS:
         continue
 
     title = paper.get("title", "No title")
