@@ -1,5 +1,6 @@
 import os
 import smtplib
+import json
 from email.mime.text import MIMEText
 
 import requests
@@ -207,7 +208,36 @@ def fetch_papers_for_search(search_term):
             papers.append(paper)
 
     return papers
+SEEN_PAPERS_FILE = "seen_papers.json"
 
+
+def load_seen_papers():
+
+    if not os.path.exists(SEEN_PAPERS_FILE):
+        return set()
+
+    with open(
+        SEEN_PAPERS_FILE,
+        "r",
+        encoding="utf-8"
+    ) as file:
+
+        return set(json.load(file))
+
+
+def save_seen_papers(seen_papers):
+
+    with open(
+        SEEN_PAPERS_FILE,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            sorted(list(seen_papers)),
+            file,
+            indent=2
+        )
 
 print("\nCollecting papers...\n")
 
