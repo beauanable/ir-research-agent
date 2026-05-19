@@ -342,13 +342,16 @@ Provide:
 3. Dataset or evidence used
 4. Key findings
 5. Why this matters for IR scholars
-6. Why this matters for research on:
-   - great power competition
-   - energy infrastructure
-   - compute power
-   - AI governance
-   - state capacity
-   - geopolitical strategy
+6. ONLY if this paper is strategically relevant outside core IR journals:
+Why this matters for research on:
+- great power competition
+- energy infrastructure
+- compute power
+- AI governance
+- state capacity
+- geopolitical strategy
+
+If this is a general IR paper from a core IR journal and not specifically related to those themes, omit section 6 entirely.
 
 Be concise but analytically useful.
 
@@ -390,19 +393,20 @@ Abstract:
     summary = completion.choices[0].message.content
 
     paper_text = f"""
-================================================================================
-TITLE: {title}
-JOURNAL: {journal}
-YEAR: {publication_year}
-DOI: {doi}
-CITATIONS: {cited_by_count}
-SEARCH TOPIC: {search_term}
-TOTAL SCORE: {total_score}
-STRATEGIC SCORE: {strategic_score}
-IR SCORE: {ir_score}
-================================================================================
+
+<b>Title:</b> {title}
+<b>Journal:</b> {journal}
+<b>Year:</b> {publication_year}
+<b>DOI:</b> {doi}
+<b>Citations:</b> {cited_by_count}
+<b>Search Topic:</b> {search_term}
+<b>Total Score:</b> {total_score}
+<b>Strategic Score:</b> {strategic_score}
+<b>IR Score:</b> {ir_score}
 
 {summary}
+
+<br><br>
 
 """
 
@@ -429,7 +433,7 @@ sender = os.environ["EMAIL_ADDRESS"]
 
 password = os.environ["EMAIL_PASSWORD"]
 
-msg = MIMEText(email_content)
+msg = MIMEText(email_content, "html")
 
 msg["Subject"] = "Weekly IR Research Digest"
 
