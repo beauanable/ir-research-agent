@@ -94,7 +94,6 @@ def reconstruct_abstract(abstract_inverted_index):
             word_positions.append((position, word))
 
     word_positions.sort()
-
     return " ".join(word for position, word in word_positions)
 
 
@@ -102,6 +101,15 @@ def get_journal(paper):
     primary_location = paper.get("primary_location") or {}
     source = primary_location.get("source") or {}
     return source.get("display_name", "")
+
+
+def get_paper_id(paper):
+    paper_id = paper.get("doi") or paper.get("id") or paper.get("title")
+
+    if not paper_id:
+        return None
+
+    return paper_id.strip().lower()
 
 
 def calculate_strategic_score(text):
@@ -208,36 +216,27 @@ def fetch_papers_for_search(search_term):
             papers.append(paper)
 
     return papers
+
+
 SEEN_PAPERS_FILE = "seen_papers.json"
 
 
 def load_seen_papers():
-
     if not os.path.exists(SEEN_PAPERS_FILE):
         return set()
 
-    with open(
-        SEEN_PAPERS_FILE,
-        "r",
-        encoding="utf-8"
-    ) as file:
-
-        return set(json.load(file))
+    with open(SEEN_PAPERS_FILE, "r", encoding="utf-8") as file:
+        return set(item.strip().lower() for item in json.load(file))
 
 
 def save_seen_papers(seen_papers):
-
-    with open(
-        SEEN_PAPERS_FILE,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
+    with open(SEEN_PAPERS_FILE, "w", encoding="utf-8") as file:
         json.dump(
             sorted(list(seen_papers)),
             file,
             indent=2
         )
+
 
 print("\nCollecting papers...\n")
 
@@ -251,7 +250,10 @@ for search_term in SEARCH_TERMS:
 deduped_papers = {}
 
 for paper in all_papers:
-    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
+    unique_id = get_paper_id(paper)
+
+    if not unique_id:
+        continue
 
     if unique_id not in deduped_papers:
         deduped_papers[unique_id] = paper
@@ -271,9 +273,9 @@ seen_papers = load_seen_papers()
 new_ranked_papers = []
 
 for paper in ranked_papers:
-    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
+    unique_id = get_paper_id(paper)
 
-    if unique_id not in seen_papers:
+    if unique_id and unique_id not in seen_papers:
         new_ranked_papers.append(paper)
 
 selected_papers = new_ranked_papers[:10]
@@ -395,9 +397,11 @@ Abstract:
     print(paper_text)
     email_content += paper_text
     papers_processed += 1
-    
-    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
-    seen_papers.add(unique_id)
+
+    unique_id = get_paper_id(paper)
+
+    if unique_id:
+        seen_papers.add(unique_id)
 
 
 if papers_processed == 0:
