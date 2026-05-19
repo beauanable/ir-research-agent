@@ -27,3 +27,14 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: python main.py
+
+      - name: Commit updated seen papers
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          git add seen_papers.json
+
+          git diff --cached --quiet || git commit -m "Update seen papers"
+
+          git push
