@@ -395,6 +395,9 @@ Abstract:
     print(paper_text)
     email_content += paper_text
     papers_processed += 1
+    
+    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
+    seen_papers.add(unique_id)
 
 
 if papers_processed == 0:
