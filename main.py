@@ -94,21 +94,17 @@ def reconstruct_abstract(abstract_inverted_index):
 
     word_positions.sort()
 
-    return " ".join(
-        word for position, word in word_positions
-    )
+    return " ".join(word for position, word in word_positions)
 
 
 def get_journal(paper):
     primary_location = paper.get("primary_location") or {}
     source = primary_location.get("source") or {}
-
     return source.get("display_name", "")
 
 
 def calculate_strategic_score(text):
     score = 0
-
     lower_text = text.lower()
 
     for keyword in STRATEGIC_KEYWORDS:
@@ -120,7 +116,6 @@ def calculate_strategic_score(text):
 
 def calculate_ir_score(text):
     score = 0
-
     lower_text = text.lower()
 
     for keyword in GENERAL_IR_KEYWORDS:
@@ -134,21 +129,14 @@ def score_paper(paper, search_term):
     score = 0
 
     title = paper.get("title") or ""
-
-    abstract_text = reconstruct_abstract(
-        paper.get("abstract_inverted_index")
-    )
-
+    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
     journal = get_journal(paper)
-
     cited_by_count = paper.get("cited_by_count") or 0
-
     year = paper.get("publication_year") or 0
 
     combined_text = f"{title} {abstract_text}"
 
     strategic_score = calculate_strategic_score(combined_text)
-
     ir_score = calculate_ir_score(combined_text)
 
     if journal in CORE_IR_JOURNALS:
@@ -162,13 +150,11 @@ def score_paper(paper, search_term):
         score += 8
 
     score += min(cited_by_count, 100) / 5
-
     score += strategic_score
-
     score += ir_score
 
     for term_word in search_term.lower().split():
-        if term_word.lower() in combined_text.lower():
+        if term_word in combined_text.lower():
             score += 2
 
     if abstract_text:
@@ -184,7 +170,6 @@ def score_paper(paper, search_term):
 
 def should_include_paper(paper):
     journal = get_journal(paper)
-
     strategic_score = paper.get("strategic_score", 0)
 
     if journal in CORE_IR_JOURNALS:
@@ -204,11 +189,7 @@ def fetch_papers_for_search(search_term):
         "per-page": 25,
     }
 
-    response = requests.get(
-        OPENALEX_URL,
-        params=params
-    )
-
+    response = requests.get(OPENALEX_URL, params=params)
     data = response.json()
 
     if "results" not in data:
@@ -219,13 +200,8 @@ def fetch_papers_for_search(search_term):
     papers = []
 
     for paper in data["results"]:
-
         paper["search_term"] = search_term
-
-        paper["score"] = score_paper(
-            paper,
-            search_term
-        )
+        paper["score"] = score_paper(paper, search_term)
 
         if should_include_paper(paper):
             papers.append(paper)
@@ -238,31 +214,19 @@ print("\nCollecting papers...\n")
 all_papers = []
 
 for search_term in SEARCH_TERMS:
-
     print(f"Searching: {search_term}")
-
-    papers = fetch_papers_for_search(search_term)
-
-    all_papers.extend(papers)
+    all_papers.extend(fetch_papers_for_search(search_term))
 
 
 deduped_papers = {}
 
 for paper in all_papers:
-
-    unique_id = (
-        paper.get("doi")
-        or paper.get("id")
-        or paper.get("title")
-    )
+    unique_id = paper.get("doi") or paper.get("id") or paper.get("title")
 
     if unique_id not in deduped_papers:
         deduped_papers[unique_id] = paper
-
     else:
-        existing_score = deduped_papers[unique_id]["score"]
-
-        if paper["score"] > existing_score:
+        if paper["score"] > deduped_papers[unique_id]["score"]:
             deduped_papers[unique_id] = paper
 
 
@@ -275,94 +239,71 @@ ranked_papers = sorted(
 selected_papers = ranked_papers[:10]
 
 email_content = """
-Weekly IR Research Digest
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.5; font-size: 14px;">
 
-Selection Logic:
-- High-impact core IR journals always prioritized
-- Adjacent disciplines only included if strongly related to:
-  great power strategy, energy infrastructure, compute power,
-  state capacity, strategic technology, or geopolitical competition
+<h2>Weekly IR Research Digest</h2>
 
+<p><b>Selection Logic:</b><br>
+High-impact core IR journals are always prioritized.<br>
+Adjacent disciplines are included only if strongly related to great power strategy,
+energy infrastructure, compute power, state capacity, strategic technology,
+or geopolitical competition.
+</p>
+
+<hr>
 """
 
 papers_processed = 0
 
 for paper in selected_papers:
-
     title = paper.get("title", "No title")
-
-    abstract_text = reconstruct_abstract(
-        paper.get("abstract_inverted_index")
-    )
-
+    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
     doi = paper.get("doi", "No DOI")
-
-    publication_year = paper.get(
-        "publication_year",
-        "Unknown year"
-    )
-
+    publication_year = paper.get("publication_year", "Unknown year")
     journal = get_journal(paper)
-
-    cited_by_count = paper.get(
-        "cited_by_count",
-        0
-    )
-
-    search_term = paper.get(
-        "search_term",
-        "Unknown"
-    )
-
-    total_score = round(
-        paper.get("score", 0),
-        2
-    )
-
-    strategic_score = paper.get(
-        "strategic_score",
-        0
-    )
-
-    ir_score = paper.get(
-        "ir_score",
-        0
-    )
+    cited_by_count = paper.get("cited_by_count", 0)
+    search_term = paper.get("search_term", "Unknown")
+    total_score = round(paper.get("score", 0), 2)
+    strategic_score = paper.get("strategic_score", 0)
+    ir_score = paper.get("ir_score", 0)
 
     if not abstract_text:
         continue
 
+    is_core_ir = journal in CORE_IR_JOURNALS
+
     prompt = f"""
 You are an elite international relations research assistant.
 
-Provide:
+Provide the following sections using HTML formatting only:
 
-1. Main argument
-2. Research method
-3. Dataset or evidence used
-4. Key findings
-5. Why this matters for IR scholars
-6. ONLY if this paper is strategically relevant outside core IR journals:
-Why this matters for research on:
-- great power competition
-- energy infrastructure
-- compute power
-- AI governance
-- state capacity
-- geopolitical strategy
+<p><b>Main argument:</b> ...</p>
+<p><b>Research method:</b> ...</p>
+<p><b>Dataset or evidence used:</b> ...</p>
+<p><b>Key findings:</b> ...</p>
+<p><b>Why this matters for IR scholars:</b> ...</p>
 
-If this is a general IR paper from a core IR journal and not specifically related to those themes, omit section 6 entirely.
+Only include this final section if the paper is strategically relevant to great power competition,
+energy infrastructure, compute power, AI governance, state capacity, or geopolitical strategy:
 
-Be concise but analytically useful.
+<p><b>Why this matters for strategic infrastructure research:</b> ...</p>
 
-If the abstract does not clearly specify the method or dataset,
-explicitly say that.
+Do not use markdown.
+Do not use asterisks.
+Do not number the sections.
+Use short, readable paragraphs.
+
+If the abstract does not clearly specify the method or dataset, explicitly say that.
 
 Paper title:
 {title}
 
 Journal:
 {journal}
+
+Is this a core IR journal?
+{is_core_ir}
 
 Year:
 {publication_year}
@@ -393,63 +334,52 @@ Abstract:
     summary = completion.choices[0].message.content
 
     paper_text = f"""
+<h3>{title}</h3>
 
-<b>Title:</b> {title}
-<b>Journal:</b> {journal}
-<b>Year:</b> {publication_year}
-<b>DOI:</b> {doi}
-<b>Citations:</b> {cited_by_count}
-<b>Search Topic:</b> {search_term}
-<b>Total Score:</b> {total_score}
-<b>Strategic Score:</b> {strategic_score}
+<p>
+<b>Journal:</b> {journal}<br>
+<b>Year:</b> {publication_year}<br>
+<b>DOI:</b> <a href="{doi}">{doi}</a><br>
+<b>Citations:</b> {cited_by_count}<br>
+<b>Search Topic:</b> {search_term}<br>
+<b>Total Score:</b> {total_score}<br>
+<b>Strategic Score:</b> {strategic_score}<br>
 <b>IR Score:</b> {ir_score}
+</p>
 
 {summary}
 
-<br><br>
-
+<hr>
 """
 
     print(paper_text)
-
     email_content += paper_text
-
     papers_processed += 1
 
 
 if papers_processed == 0:
-
     email_content += """
-No matching papers were found.
+<p>No matching papers were found.</p>
 
-You may want to:
-- broaden search terms
-- add journals
-- lower strategic relevance threshold
+<p>You may want to broaden search terms, add journals, or lower the strategic relevance threshold.</p>
 """
 
 
-sender = os.environ["EMAIL_ADDRESS"]
+email_content += """
+</body>
+</html>
+"""
 
+sender = os.environ["EMAIL_ADDRESS"]
 password = os.environ["EMAIL_PASSWORD"]
 
 msg = MIMEText(email_content, "html")
-
 msg["Subject"] = "Weekly IR Research Digest"
-
 msg["From"] = sender
-
 msg["To"] = sender
 
-
-with smtplib.SMTP_SSL(
-    "smtp.gmail.com",
-    465
-) as server:
-
+with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
     server.login(sender, password)
-
     server.send_message(msg)
-
 
 print("Email sent successfully.")
