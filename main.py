@@ -372,6 +372,25 @@ for paper in selected_papers:
     doi = paper.get("doi", "No DOI")
     publication_year = paper.get("publication_year", "Unknown year")
     journal = get_journal(paper)
+
+    journal = get_journal(paper)
+
+    authors = []
+
+    for authorship in paper.get("authorships", []):
+
+        author = authorship.get("author") or {}
+
+        author_name = author.get("display_name")
+
+    if author_name:
+        authors.append(author_name)
+
+    authors_text = ", ".join(authors[:6])
+
+    if len(authors) > 6:
+        authors_text += ", et al."
+
     cited_by_count = paper.get("cited_by_count", 0)
     search_term = paper.get("search_term", "Unknown")
     total_score = round(paper.get("score", 0), 2)
@@ -447,6 +466,7 @@ Abstract:
 <h3>{title}</h3>
 
 <p>
+<b>Authors:</b> {authors_text}<br>
 <b>Journal:</b> {journal}<br>
 <b>Year:</b> {publication_year}<br>
 <b>DOI:</b> <a href="{doi}">{doi}</a><br>
