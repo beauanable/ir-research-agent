@@ -3,16 +3,20 @@ import requests
 url = "https://api.openalex.org/works"
 
 params = {
-    "filter": "primary_location.source.display_name:International Organization",
+    "search": "International Organization international relations",
     "sort": "publication_date:desc",
     "per-page": 5
 }
 
 response = requests.get(url, params=params)
-
 data = response.json()
 
-print("\nLatest International Organization Papers:\n")
+print("\nLatest International Relations Papers:\n")
+
+if "results" not in data:
+    print("OpenAlex returned an unexpected response:")
+    print(data)
+    raise SystemExit(1)
 
 for paper in data["results"]:
     title = paper.get("title", "No title")
