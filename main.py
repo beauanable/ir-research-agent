@@ -157,9 +157,9 @@ GENERAL_IR_KEYWORDS = [
     "military",
 ]
 
+
 def get_pdf_url(paper):
     open_access = paper.get("open_access") or {}
-
     pdf_url = open_access.get("oa_url")
 
     if pdf_url and pdf_url.lower().endswith(".pdf"):
@@ -173,40 +173,34 @@ def get_pdf_url(paper):
 
     return None
 
+
 def extract_pdf_text(pdf_url):
-
     try:
-
-        response = requests.get(
-            pdf_url,
-            timeout=20
-        )
+        response = requests.get(pdf_url, timeout=20)
 
         if response.status_code != 200:
             return None
 
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".pdf"
-        ) as tmp_file:
+        content_type = response.headers.get("Content-Type", "")
 
+        if "pdf" not in content_type.lower():
+            return None
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(response.content)
-
             pdf_path = tmp_file.name
 
         reader = PdfReader(pdf_path)
-
         full_text = ""
 
         for page in reader.pages[:15]:
-
             try:
                 text = page.extract_text()
 
                 if text:
                     full_text += text + "\n"
 
-            except:
+            except Exception:
                 continue
 
         if len(full_text.strip()) < 1000:
@@ -215,10 +209,9 @@ def extract_pdf_text(pdf_url):
         return full_text[:50000]
 
     except Exception as e:
-
         print(f"PDF extraction failed: {e}")
-
         return None
+
 
 def reconstruct_abstract(abstract_inverted_index):
     if not abstract_inverted_index:
@@ -287,13 +280,10 @@ def score_paper(paper, search_term):
 
     if journal in TIER_1_JOURNALS:
         score += 60
-
     elif journal in TIER_2_JOURNALS:
         score += 45
-
     elif journal in TIER_3_JOURNALS:
         score += 30
-
     elif journal in CORE_IR_JOURNALS:
         score += 20
 
@@ -307,6 +297,7 @@ def score_paper(paper, search_term):
     score += min(cited_by_count, 100) / 5
     score += strategic_score
     score += ir_score
+
     for keyword in TECHNICAL_PENALTY_KEYWORDS:
         if keyword in combined_text.lower():
             score -= 15
@@ -380,11 +371,7 @@ def load_seen_papers():
 
 def save_seen_papers(seen_papers):
     with open(SEEN_PAPERS_FILE, "w", encoding="utf-8") as file:
-        json.dump(
-            sorted(list(seen_papers)),
-            file,
-            indent=2
-        )
+        json.dump(sorted(list(seen_papers)), file, indent=2)
 
 
 print("\nCollecting papers...\n")
@@ -418,7 +405,6 @@ ranked_papers = sorted(
 )
 
 seen_papers = load_seen_papers()
-
 new_ranked_papers = []
 
 for paper in ranked_papers:
@@ -432,7 +418,8 @@ print(f"Deduped papers: {len(deduped_papers)}")
 print(f"Seen papers loaded: {len(seen_papers)}")
 print(f"New papers after seen filter: {len(new_ranked_papers)}")
 
-selected_papers = new_ranked_papers[:8]
+selected_papers = new_ranked_papers[:30]
+MAX_PAPERS_TO_EMAIL = 8
 
 email_content = """
 <html>
@@ -453,18 +440,25 @@ or geopolitical competition.
 papers_processed = 0
 
 for paper in selected_papers:
+    if papers_processed >= MAX_PAPERS_TO_EMAIL:
+        break
+
     title = paper.get("title", "No title")
     abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+
     pdf_url = get_pdf_url(paper)
     full_text = None
+
     if pdf_url:
         print(f"Attempting PDF extraction: {pdf_url}")
         full_text = extract_pdf_text(pdf_url)
+
     analysis_source = (
         "Full PDF"
         if full_text
         else "Abstract Only"
     )
+
     doi = paper.get("doi", "No DOI")
     publication_year = paper.get("publication_year", "Unknown year")
     journal = get_journal(paper)
@@ -472,13 +466,11 @@ for paper in selected_papers:
     authors = []
 
     for authorship in paper.get("authorships", []):
-
         author = authorship.get("author") or {}
-
         author_name = author.get("display_name")
 
-    if author_name:
-        authors.append(author_name)
+        if author_name:
+            authors.append(author_name)
 
     authors_text = ", ".join(authors[:6])
 
@@ -496,13 +488,13 @@ for paper in selected_papers:
 
     is_core_ir = journal in CORE_IR_JOURNALS
 
-analysis_text = (
-    full_text
-    if full_text
-    else abstract_text
-)
+    analysis_text = (
+        full_text
+        if full_text
+        else abstract_text
+    )
 
-prompt = f"""
+    prompt = f"""
 You are an elite international relations research assistant.
 
 Provide the following sections using HTML formatting only.
@@ -539,16 +531,14 @@ industrial policy, technological competition, or geopolitical strategy:
 
 <p><b>Why this matters for strategic infrastructure research:</b> ...</p>
 
-If the abstract does not clearly specify a category,
-explicitly say "Not clearly specified in abstract."
+If the abstract or paper text does not clearly specify a category,
+explicitly say "Not clearly specified in available text."
 
 Do not invent methods or datasets.
 Do not use markdown.
 Do not use asterisks.
 Do not number sections.
 Use short readable paragraphs.
-
-If the abstract does not clearly specify the method or dataset, explicitly say that.
 
 Paper title:
 {title}
@@ -575,19 +565,19 @@ Paper Text:
 {analysis_text}
 """
 
-completion = client.chat.completions.create(
-    model="gpt-4.1-mini",
-    messages=[
-        {
-            "role": "user",
-            "content": prompt,
-        }
-    ],
-)
+    completion = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    )
 
-summary = completion.choices[0].message.content
+    summary = completion.choices[0].message.content
 
-paper_text = f"""
+    paper_text = f"""
 <h3>{title}</h3>
 
 <p>
@@ -608,14 +598,14 @@ paper_text = f"""
 <hr>
 """
 
-print(paper_text)
-email_content += paper_text
-papers_processed += 1
+    print(paper_text)
+    email_content += paper_text
+    papers_processed += 1
 
-unique_id = get_paper_id(paper)
+    unique_id = get_paper_id(paper)
 
-if unique_id:
-    seen_papers.add(unique_id)
+    if unique_id:
+        seen_papers.add(unique_id)
 
 
 if papers_processed == 0:
