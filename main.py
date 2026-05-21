@@ -625,6 +625,7 @@ def save_processed_chunks(paper_record):
             file.write(
                 json.dumps(chunk_record, ensure_ascii=False) + "\n"
             )
+            print(f"Saved chunk {index} with embedding: {embedding is not None}")
 
 print("\nCollecting papers...\n")
 
