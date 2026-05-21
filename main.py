@@ -482,32 +482,40 @@ def should_include_paper(paper):
 
 
 def fetch_papers_for_search(search_term):
-    params = {
-        "filter": "from_publication_date:2024-01-01",
-        "search": search_term,
-        "sort": "cited_by_count:desc",
-        "per-page": 200,
-    }
-
-    response = requests.get(OPENALEX_URL, params=params)
-    data = response.json()
-
-    if "results" not in data:
-        print("Unexpected OpenAlex response:")
-        print(data)
-        return []
-
     papers = []
+    cursor = "*"
+    pages_to_fetch = 3
 
-    for paper in data["results"]:
-        paper["search_term"] = search_term
-        paper["score"] = score_paper(paper, search_term)
+    for page_number in range(pages_to_fetch):
+        params = {
+            "filter": "from_publication_date:2024-01-01",
+            "search": search_term,
+            "sort": "cited_by_count:desc",
+            "per-page": 200,
+            "cursor": cursor,
+        }
 
-        if should_include_paper(paper):
-            papers.append(paper)
+        response = requests.get(OPENALEX_URL, params=params)
+        data = response.json()
+
+        if "results" not in data:
+            print("Unexpected OpenAlex response:")
+            print(data)
+            break
+
+        for paper in data["results"]:
+            paper["search_term"] = search_term
+            paper["score"] = score_paper(paper, search_term)
+
+            if should_include_paper(paper):
+                papers.append(paper)
+
+        cursor = data.get("meta", {}).get("next_cursor")
+
+        if not cursor:
+            break
 
     return papers
-
 
 def load_seen_papers():
     if not os.path.exists(SEEN_PAPERS_FILE):
