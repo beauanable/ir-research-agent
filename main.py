@@ -280,7 +280,7 @@ def score_paper(paper, search_term):
     cited_by_count = paper.get("cited_by_count") or 0
     year = paper.get("publication_year") or 0
 
-   combined_text = f"{title} {abstract_text}"
+    combined_text = f"{title} {abstract_text}"
 
     strategic_score = calculate_strategic_score(combined_text)
     ir_score = calculate_ir_score(combined_text)
