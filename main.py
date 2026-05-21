@@ -473,12 +473,17 @@ for paper in selected_papers:
     title = paper.get("title", "No title")
     abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
 
-    pdf_url = get_pdf_urls(paper)
+    pdf_urls = get_pdf_urls(paper)
     full_text = None
 
-    if pdf_url:
+    for pdf_url in pdf_urls:
         print(f"Attempting PDF extraction: {pdf_url}")
+
         full_text = extract_pdf_text(pdf_url)
+
+        if full_text:
+            print(f"PDF extraction succeeded: {pdf_url}")
+            break
 
     analysis_source = (
         "Full PDF"
