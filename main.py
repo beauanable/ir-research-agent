@@ -11,6 +11,8 @@ from pypdf import PdfReader
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+EMBEDDING_MODEL = "text-embedding-3-small"
+
 OPENALEX_URL = "https://api.openalex.org/works"
 UNPAYWALL_URL = "https://api.unpaywall.org/v2"
 UNPAYWALL_EMAIL = os.environ["EMAIL_ADDRESS"]
@@ -554,6 +556,19 @@ def save_processed_paper(record):
     with open(PROCESSED_PAPERS_FILE, "a", encoding="utf-8") as file:
         file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+def create_embedding(text):
+    try:
+        response = client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=text
+        )
+
+        return response.data[0].embedding
+
+    except Exception as e:
+        print(f"Embedding creation failed: {e}")
+        return None
+
 def chunk_text(text, max_chars=3000, overlap_chars=400):
     if not text:
         return []
@@ -593,6 +608,7 @@ def save_processed_chunks(paper_record):
 
     with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8") as file:
         for index, chunk in enumerate(chunks):
+            embedding = create_embedding(chunk)
             chunk_record = {
                 "title": paper_record.get("title"),
                 "authors": paper_record.get("authors"),
@@ -603,6 +619,7 @@ def save_processed_chunks(paper_record):
                 "analysis_source": paper_record.get("analysis_source"),
                 "chunk_index": index,
                 "chunk_text": chunk,
+                "embedding": embedding,
             }
 
             file.write(
