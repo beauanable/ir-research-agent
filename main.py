@@ -508,7 +508,7 @@ analysis_text = (
     else abstract_text
 )
 
-    prompt = f"""
+prompt = f"""
 You are an elite international relations research assistant.
 
 Provide the following sections using HTML formatting only.
