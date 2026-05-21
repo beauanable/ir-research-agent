@@ -427,23 +427,48 @@ for paper in selected_papers:
     prompt = f"""
 You are an elite international relations research assistant.
 
-Provide the following sections using HTML formatting only:
+Provide the following sections using HTML formatting only.
+
+Each section should be concise, analytical, and specific.
+
+Use this exact structure:
 
 <p><b>Main argument:</b> ...</p>
-<p><b>Research method:</b> ...</p>
-<p><b>Dataset or evidence used:</b> ...</p>
+
+<p><b>Research design:</b> ...</p>
+
+<p><b>Method:</b> ...</p>
+
+<p><b>Dataset or evidence:</b> ...</p>
+
+<p><b>Unit of analysis:</b> ...</p>
+
+<p><b>Time period studied:</b> ...</p>
+
+<p><b>Geographic focus:</b> ...</p>
+
+<p><b>Identification strategy:</b> ...</p>
+
 <p><b>Key findings:</b> ...</p>
+
+<p><b>Main limitations:</b> ...</p>
+
 <p><b>Why this matters for IR scholars:</b> ...</p>
 
 Only include this final section if the paper is strategically relevant to great power competition,
-energy infrastructure, compute power, AI governance, state capacity, or geopolitical strategy:
+energy infrastructure, compute power, AI governance, state capacity,
+industrial policy, technological competition, or geopolitical strategy:
 
 <p><b>Why this matters for strategic infrastructure research:</b> ...</p>
 
+If the abstract does not clearly specify a category,
+explicitly say "Not clearly specified in abstract."
+
+Do not invent methods or datasets.
 Do not use markdown.
 Do not use asterisks.
-Do not number the sections.
-Use short, readable paragraphs.
+Do not number sections.
+Use short readable paragraphs.
 
 If the abstract does not clearly specify the method or dataset, explicitly say that.
 
