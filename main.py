@@ -653,6 +653,7 @@ for paper in selected_papers:
     ]
 
     full_text = None
+    pdf_url_used = None
 
     for pdf_url in pdf_urls:
         print(f"Attempting PDF extraction: {pdf_url}")
@@ -660,6 +661,7 @@ for paper in selected_papers:
         full_text = extract_pdf_text(pdf_url)
 
         if full_text:
+            pdf_url_used = pdf_url
             print(f"PDF extraction succeeded: {pdf_url}")
             break
 
@@ -822,6 +824,7 @@ Paper Text:
         "abstract": abstract_text,
         "full_text": full_text,
         "summary_html": summary,
+        "pdf_url_used": pdf_url_used,
         "pdf_urls_checked": pdf_urls,
     }
 
