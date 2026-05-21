@@ -288,7 +288,7 @@ def score_paper(paper, search_term):
         full_text = extract_pdf_text(pdf_url)
 
     combined_text = (
-        f"{title} {full_text}
+        f"{title} {full_text}"
         if full_text
         else f"{title} {abstract_text}"
     )
