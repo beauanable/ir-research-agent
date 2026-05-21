@@ -460,6 +460,11 @@ for paper in selected_papers:
     if pdf_url:
         print(f"Attempting PDF extraction: {pdf_url}")
         full_text = extract_pdf_text(pdf_url)
+    analysis_source = (
+        "Full PDF"
+        if full_text
+        else "Abstract Only"
+    )
     doi = paper.get("doi", "No DOI")
     publication_year = paper.get("publication_year", "Unknown year")
     journal = get_journal(paper)
@@ -592,6 +597,7 @@ paper_text = f"""
 <b>DOI:</b> <a href="{doi}">{doi}</a><br>
 <b>Citations:</b> {cited_by_count}<br>
 <b>Search Topic:</b> {search_term}<br>
+<b>Analysis Source:</b> {analysis_source}<br>
 <b>Total Score:</b> {total_score}<br>
 <b>Strategic Score:</b> {strategic_score}<br>
 <b>IR Score:</b> {ir_score}
