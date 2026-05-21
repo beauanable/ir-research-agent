@@ -12,6 +12,8 @@ from pypdf import PdfReader
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 OPENALEX_URL = "https://api.openalex.org/works"
+UNPAYWALL_URL = "https://api.unpaywall.org/v2"
+UNPAYWALL_EMAIL = os.environ["EMAIL_ADDRESS"]
 
 SEARCH_TERMS = [
     "AI geopolitics",
@@ -157,6 +159,19 @@ GENERAL_IR_KEYWORDS = [
     "military",
 ]
 
+
+def dedupe_urls(urls):
+    seen = set()
+    clean = []
+
+    for url in urls:
+        if url and url not in seen:
+            seen.add(url)
+            clean.append(url)
+
+    return clean
+
+
 def get_pdf_urls(work):
     candidates = []
 
@@ -177,28 +192,66 @@ def get_pdf_urls(work):
     if open_access.get("oa_url"):
         candidates.append(open_access["oa_url"])
 
-    seen = set()
-    clean = []
+    return dedupe_urls(candidates)
 
-    for url in candidates:
-        if url and url not in seen:
-            seen.add(url)
-            clean.append(url)
 
-    return clean
+def get_unpaywall_pdf_urls(doi):
+    if not doi:
+        return []
+
+    clean_doi = doi.replace("https://doi.org/", "").strip()
+
+    if not clean_doi:
+        return []
+
+    try:
+        response = requests.get(
+            f"{UNPAYWALL_URL}/{clean_doi}",
+            params={"email": UNPAYWALL_EMAIL},
+            timeout=20,
+        )
+
+        if response.status_code != 200:
+            print(f"Unpaywall lookup failed with status {response.status_code}: {doi}")
+            return []
+
+        data = response.json()
+        candidates = []
+
+        best = data.get("best_oa_location") or {}
+
+        if best.get("url_for_pdf"):
+            candidates.append(best["url_for_pdf"])
+
+        for loc in data.get("oa_locations", []) or []:
+            if loc.get("url_for_pdf"):
+                candidates.append(loc["url_for_pdf"])
+
+        return dedupe_urls(candidates)
+
+    except Exception as e:
+        print(f"Unpaywall lookup failed for {doi}: {e}")
+        return []
 
 
 def extract_pdf_text(pdf_url):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/pdf,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://scholar.google.com/",
         }
 
         response = requests.get(
             pdf_url,
             headers=headers,
             timeout=30,
-            allow_redirects=True
+            allow_redirects=True,
         )
 
         if response.status_code != 200:
@@ -497,8 +550,15 @@ for paper in selected_papers:
 
     title = paper.get("title", "No title")
     abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    doi = paper.get("doi", "No DOI")
 
     pdf_urls = get_pdf_urls(paper)
+
+    if doi and doi != "No DOI":
+        pdf_urls.extend(get_unpaywall_pdf_urls(doi))
+
+    pdf_urls = dedupe_urls(pdf_urls)
+
     full_text = None
 
     for pdf_url in pdf_urls:
@@ -516,7 +576,6 @@ for paper in selected_papers:
         else "Abstract Only"
     )
 
-    doi = paper.get("doi", "No DOI")
     publication_year = paper.get("publication_year", "Unknown year")
     journal = get_journal(paper)
 
