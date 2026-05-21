@@ -347,12 +347,37 @@ def score_paper(paper, search_term):
 def should_include_paper(paper):
     journal = get_journal(paper)
     strategic_score = paper.get("strategic_score", 0)
+    ir_score = paper.get("ir_score", 0)
+
+    title = paper.get("title") or ""
+    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    combined_text = f"{title} {abstract_text}".lower()
 
     if journal in CORE_IR_JOURNALS:
         return True
 
-    if strategic_score >= 20:
+    if strategic_score >= 20 and ir_score >= 6:
         return True
+
+    geopolitical_terms = [
+        "geopolitics",
+        "geopolitical",
+        "great power",
+        "national security",
+        "state capacity",
+        "industrial policy",
+        "strategic competition",
+        "supply chain security",
+        "technological sovereignty",
+        "economic statecraft",
+        "international relations",
+        "foreign policy",
+    ]
+
+    if strategic_score >= 20:
+        for term in geopolitical_terms:
+            if term in combined_text:
+                return True
 
     return False
 
