@@ -233,6 +233,30 @@ def get_unpaywall_pdf_urls(doi):
         print(f"Unpaywall lookup failed for {doi}: {e}")
         return []
 
+def resolve_doi_to_pdf(doi_url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/pdf",
+        }
+
+        response = requests.get(
+            doi_url,
+            headers=headers,
+            timeout=20,
+            allow_redirects=True,
+        )
+
+        final_url = response.url
+
+        if final_url and final_url != doi_url:
+            return final_url
+
+        return None
+
+    except Exception as e:
+        print(f"DOI resolution failed for {doi_url}: {e}")
+        return None
 
 def extract_pdf_text(pdf_url):
     try:
@@ -557,6 +581,18 @@ for paper in selected_papers:
     if doi and doi != "No DOI":
         pdf_urls.extend(get_unpaywall_pdf_urls(doi))
 
+    resolved_urls = []
+
+    for url in pdf_urls:
+        if "doi.org" in url:
+            resolved = resolve_doi_to_pdf(url)
+
+            if resolved:
+                resolved_urls.append(resolved)
+
+        resolved_urls.append(url)
+
+    pdf_urls.extend(resolved_urls)
     pdf_urls = dedupe_urls(pdf_urls)
 
     full_text = None
