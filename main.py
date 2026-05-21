@@ -1,10 +1,12 @@
 import os
 import smtplib
 import json
+import tempfile
 from email.mime.text import MIMEText
 
 import requests
 from openai import OpenAI
+from pypdf import PdfReader
 
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -155,6 +157,68 @@ GENERAL_IR_KEYWORDS = [
     "military",
 ]
 
+def get_pdf_url(paper):
+    open_access = paper.get("open_access") or {}
+
+    pdf_url = open_access.get("oa_url")
+
+    if pdf_url and pdf_url.lower().endswith(".pdf"):
+        return pdf_url
+
+    primary_location = paper.get("primary_location") or {}
+    landing_page_url = primary_location.get("landing_page_url")
+
+    if landing_page_url and landing_page_url.lower().endswith(".pdf"):
+        return landing_page_url
+
+    return None
+
+def extract_pdf_text(pdf_url):
+
+    try:
+
+        response = requests.get(
+            pdf_url,
+            timeout=20
+        )
+
+        if response.status_code != 200:
+            return None
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".pdf"
+        ) as tmp_file:
+
+            tmp_file.write(response.content)
+
+            pdf_path = tmp_file.name
+
+        reader = PdfReader(pdf_path)
+
+        full_text = ""
+
+        for page in reader.pages[:15]:
+
+            try:
+                text = page.extract_text()
+
+                if text:
+                    full_text += text + "\n"
+
+            except:
+                continue
+
+        if len(full_text.strip()) < 1000:
+            return None
+
+        return full_text[:50000]
+
+    except Exception as e:
+
+        print(f"PDF extraction failed: {e}")
+
+        return None
 
 def reconstruct_abstract(abstract_inverted_index):
     if not abstract_inverted_index:
