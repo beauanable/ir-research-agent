@@ -581,19 +581,19 @@ Paper Text:
 {analysis_text}
 """
 
-    completion = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-    )
+completion = client.chat.completions.create(
+    model="gpt-4.1-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": prompt,
+        }
+    ],
+)
 
-    summary = completion.choices[0].message.content
+summary = completion.choices[0].message.content
 
-    paper_text = f"""
+paper_text = f"""
 <h3>{title}</h3>
 
 <p>
