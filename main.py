@@ -563,19 +563,21 @@ def chunk_text(text, max_chars=3000, overlap_chars=400):
     text = text.strip()
 
     while start < len(text):
-        end = start + max_chars
+        end = min(start + max_chars, len(text))
         chunk = text[start:end].strip()
 
         if chunk:
             chunks.append(chunk)
 
-        start = end - overlap_chars
-
-        if start < 0:
-            start = 0
-
-        if start >= len(text):
+        if end >= len(text):
             break
+
+        next_start = end - overlap_chars
+
+        if next_start <= start:
+            break
+
+        start = next_start
 
     return chunks
 
