@@ -491,7 +491,7 @@ for paper in selected_papers:
     strategic_score = paper.get("strategic_score", 0)
     ir_score = paper.get("ir_score", 0)
 
-    if not abstract_text:
+    if not abstract_text and not full_text:
         continue
 
     is_core_ir = journal in CORE_IR_JOURNALS
