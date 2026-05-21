@@ -182,7 +182,7 @@ GENERAL_IR_KEYWORDS = [
 
 SEEN_PAPERS_FILE = "seen_papers.json"
 PROCESSED_PAPERS_FILE = "processed_papers.jsonl"
-
+PROCESSED_CHUNKS_FILE = "processed_chunks.jsonl"
 
 def dedupe_urls(urls):
     seen = set()
@@ -554,6 +554,58 @@ def save_processed_paper(record):
     with open(PROCESSED_PAPERS_FILE, "a", encoding="utf-8") as file:
         file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+def chunk_text(text, max_chars=3000, overlap_chars=400):
+    if not text:
+        return []
+
+    chunks = []
+    start = 0
+    text = text.strip()
+
+    while start < len(text):
+        end = start + max_chars
+        chunk = text[start:end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
+        start = end - overlap_chars
+
+        if start < 0:
+            start = 0
+
+        if start >= len(text):
+            break
+
+    return chunks
+
+
+def save_processed_chunks(paper_record):
+    text_for_chunking = (
+        paper_record.get("full_text")
+        or paper_record.get("abstract")
+        or ""
+    )
+
+    chunks = chunk_text(text_for_chunking)
+
+    with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8") as file:
+        for index, chunk in enumerate(chunks):
+            chunk_record = {
+                "title": paper_record.get("title"),
+                "authors": paper_record.get("authors"),
+                "journal": paper_record.get("journal"),
+                "year": paper_record.get("year"),
+                "doi": paper_record.get("doi"),
+                "search_term": paper_record.get("search_term"),
+                "analysis_source": paper_record.get("analysis_source"),
+                "chunk_index": index,
+                "chunk_text": chunk,
+            }
+
+            file.write(
+                json.dumps(chunk_record, ensure_ascii=False") + "\n"
+            )
 
 print("\nCollecting papers...\n")
 
