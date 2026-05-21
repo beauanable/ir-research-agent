@@ -159,6 +159,9 @@ GENERAL_IR_KEYWORDS = [
     "military",
 ]
 
+SEEN_PAPERS_FILE = "seen_papers.json"
+PROCESSED_PAPERS_FILE = "processed_papers.jsonl"
+
 
 def dedupe_urls(urls):
     seen = set()
@@ -233,6 +236,7 @@ def get_unpaywall_pdf_urls(doi):
         print(f"Unpaywall lookup failed for {doi}: {e}")
         return []
 
+
 def resolve_doi_to_pdf(doi_url):
     try:
         headers = {
@@ -257,6 +261,7 @@ def resolve_doi_to_pdf(doi_url):
     except Exception as e:
         print(f"DOI resolution failed for {doi_url}: {e}")
         return None
+
 
 def extract_pdf_text(pdf_url):
     try:
@@ -328,12 +333,14 @@ def reconstruct_abstract(abstract_inverted_index):
             word_positions.append((position, word))
 
     word_positions.sort()
+
     return " ".join(word for position, word in word_positions)
 
 
 def get_journal(paper):
     primary_location = paper.get("primary_location") or {}
     source = primary_location.get("source") or {}
+
     return source.get("display_name", "")
 
 
@@ -372,7 +379,10 @@ def score_paper(paper, search_term):
     score = 0
 
     title = paper.get("title") or ""
-    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    abstract_text = reconstruct_abstract(
+        paper.get("abstract_inverted_index")
+    )
+
     journal = get_journal(paper)
     cited_by_count = paper.get("cited_by_count") or 0
     year = paper.get("publication_year") or 0
@@ -427,7 +437,10 @@ def should_include_paper(paper):
     ir_score = paper.get("ir_score", 0)
 
     title = paper.get("title") or ""
-    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    abstract_text = reconstruct_abstract(
+        paper.get("abstract_inverted_index")
+    )
+
     combined_text = f"{title} {abstract_text}".lower()
 
     if journal in CORE_IR_JOURNALS:
@@ -467,7 +480,12 @@ def fetch_papers_for_search(search_term):
         "per-page": 100,
     }
 
-    response = requests.get(OPENALEX_URL, params=params)
+    response = requests.get(
+        OPENALEX_URL,
+        params=params,
+        timeout=30,
+    )
+
     data = response.json()
 
     if "results" not in data:
@@ -479,7 +497,10 @@ def fetch_papers_for_search(search_term):
 
     for paper in data["results"]:
         paper["search_term"] = search_term
-        paper["score"] = score_paper(paper, search_term)
+        paper["score"] = score_paper(
+            paper,
+            search_term,
+        )
 
         if should_include_paper(paper):
             papers.append(paper)
@@ -487,20 +508,46 @@ def fetch_papers_for_search(search_term):
     return papers
 
 
-SEEN_PAPERS_FILE = "seen_papers.json"
-
-
 def load_seen_papers():
     if not os.path.exists(SEEN_PAPERS_FILE):
         return set()
 
-    with open(SEEN_PAPERS_FILE, "r", encoding="utf-8") as file:
-        return set(item.strip().lower() for item in json.load(file))
+    with open(
+        SEEN_PAPERS_FILE,
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return set(
+            item.strip().lower()
+            for item in json.load(file)
+        )
 
 
 def save_seen_papers(seen_papers):
-    with open(SEEN_PAPERS_FILE, "w", encoding="utf-8") as file:
-        json.dump(sorted(list(seen_papers)), file, indent=2)
+    with open(
+        SEEN_PAPERS_FILE,
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            sorted(list(seen_papers)),
+            file,
+            indent=2,
+        )
+
+
+def save_processed_paper(record):
+    with open(
+        PROCESSED_PAPERS_FILE,
+        "a",
+        encoding="utf-8",
+    ) as file:
+        file.write(
+            json.dumps(
+                record,
+                ensure_ascii=False,
+            ) + "\n"
+        )
 
 
 print("\nCollecting papers...\n")
@@ -509,7 +556,10 @@ all_papers = []
 
 for search_term in SEARCH_TERMS:
     print(f"Searching: {search_term}")
-    all_papers.extend(fetch_papers_for_search(search_term))
+
+    all_papers.extend(
+        fetch_papers_for_search(search_term)
+    )
 
 
 deduped_papers = {}
@@ -548,6 +598,7 @@ print(f"Seen papers loaded: {len(seen_papers)}")
 print(f"New papers after seen filter: {len(new_ranked_papers)}")
 
 selected_papers = new_ranked_papers[:30]
+
 MAX_PAPERS_TO_EMAIL = 8
 
 email_content = """
@@ -573,13 +624,19 @@ for paper in selected_papers:
         break
 
     title = paper.get("title", "No title")
-    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+
+    abstract_text = reconstruct_abstract(
+        paper.get("abstract_inverted_index")
+    )
+
     doi = paper.get("doi", "No DOI")
 
     pdf_urls = get_pdf_urls(paper)
 
     if doi and doi != "No DOI":
-        pdf_urls.extend(get_unpaywall_pdf_urls(doi))
+        pdf_urls.extend(
+            get_unpaywall_pdf_urls(doi)
+        )
 
     resolved_urls = []
 
@@ -612,7 +669,11 @@ for paper in selected_papers:
         else "Abstract Only"
     )
 
-    publication_year = paper.get("publication_year", "Unknown year")
+    publication_year = paper.get(
+        "publication_year",
+        "Unknown year",
+    )
+
     journal = get_journal(paper)
 
     authors = []
@@ -631,9 +692,21 @@ for paper in selected_papers:
 
     cited_by_count = paper.get("cited_by_count", 0)
     search_term = paper.get("search_term", "Unknown")
-    total_score = round(paper.get("score", 0), 2)
-    strategic_score = paper.get("strategic_score", 0)
-    ir_score = paper.get("ir_score", 0)
+
+    total_score = round(
+        paper.get("score", 0),
+        2,
+    )
+
+    strategic_score = paper.get(
+        "strategic_score",
+        0,
+    )
+
+    ir_score = paper.get(
+        "ir_score",
+        0,
+    )
 
     if not abstract_text and not full_text:
         continue
@@ -729,6 +802,26 @@ Paper Text:
 
     summary = completion.choices[0].message.content
 
+    processed_record = {
+        "title": title,
+        "authors": authors,
+        "journal": journal,
+        "year": publication_year,
+        "doi": doi,
+        "cited_by_count": cited_by_count,
+        "search_term": search_term,
+        "analysis_source": analysis_source,
+        "total_score": total_score,
+        "strategic_score": strategic_score,
+        "ir_score": ir_score,
+        "abstract": abstract_text,
+        "full_text": full_text,
+        "summary_html": summary,
+        "pdf_urls_checked": pdf_urls,
+    }
+
+    save_processed_paper(processed_record)
+
     paper_text = f"""
 <h3>{title}</h3>
 
@@ -751,6 +844,7 @@ Paper Text:
 """
 
     print(paper_text)
+
     email_content += paper_text
     papers_processed += 1
 
@@ -764,7 +858,11 @@ if papers_processed == 0:
     email_content += """
 <p>No matching papers were found.</p>
 
-<p>You may want to broaden search terms, add journals, or lower the strategic relevance threshold.</p>
+<p>
+You may want to broaden search terms,
+add journals,
+or lower the strategic relevance threshold.
+</p>
 """
 
 
@@ -779,11 +877,15 @@ sender = os.environ["EMAIL_ADDRESS"]
 password = os.environ["EMAIL_PASSWORD"]
 
 msg = MIMEText(email_content, "html")
+
 msg["Subject"] = "Weekly IR Research Digest"
 msg["From"] = sender
 msg["To"] = sender
 
-with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+with smtplib.SMTP_SSL(
+    "smtp.gmail.com",
+    465,
+) as server:
     server.login(sender, password)
     server.send_message(msg)
 
