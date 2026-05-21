@@ -157,33 +157,58 @@ GENERAL_IR_KEYWORDS = [
     "military",
 ]
 
+def get_pdf_urls(work):
+    candidates = []
 
-def get_pdf_url(paper):
-    open_access = paper.get("open_access") or {}
-    pdf_url = open_access.get("oa_url")
+    best = work.get("best_oa_location") or {}
+    primary = work.get("primary_location") or {}
+    open_access = work.get("open_access") or {}
 
-    if pdf_url and pdf_url.lower().endswith(".pdf"):
-        return pdf_url
+    if best.get("pdf_url"):
+        candidates.append(best["pdf_url"])
 
-    primary_location = paper.get("primary_location") or {}
-    landing_page_url = primary_location.get("landing_page_url")
+    if primary.get("pdf_url"):
+        candidates.append(primary["pdf_url"])
 
-    if landing_page_url and landing_page_url.lower().endswith(".pdf"):
-        return landing_page_url
+    for loc in work.get("locations", []) or []:
+        if loc.get("pdf_url"):
+            candidates.append(loc["pdf_url"])
 
-    return None
+    if open_access.get("oa_url"):
+        candidates.append(open_access["oa_url"])
+
+    seen = set()
+    clean = []
+
+    for url in candidates:
+        if url and url not in seen:
+            seen.add(url)
+            clean.append(url)
+
+    return clean
 
 
 def extract_pdf_text(pdf_url):
     try:
-        response = requests.get(pdf_url, timeout=20)
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        response = requests.get(
+            pdf_url,
+            headers=headers,
+            timeout=30,
+            allow_redirects=True
+        )
 
         if response.status_code != 200:
+            print(f"PDF download failed with status {response.status_code}: {pdf_url}")
             return None
 
-        content_type = response.headers.get("Content-Type", "")
+        content_type = response.headers.get("Content-Type", "").lower()
 
-        if "pdf" not in content_type.lower():
+        if "pdf" not in content_type:
+            print(f"URL was not a PDF. Content-Type was {content_type}: {pdf_url}")
             return None
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
@@ -193,23 +218,25 @@ def extract_pdf_text(pdf_url):
         reader = PdfReader(pdf_path)
         full_text = ""
 
-        for page in reader.pages[:15]:
+        for page in reader.pages[:20]:
             try:
                 text = page.extract_text()
 
                 if text:
                     full_text += text + "\n"
 
-            except Exception:
+            except Exception as page_error:
+                print(f"Skipping unreadable PDF page: {page_error}")
                 continue
 
         if len(full_text.strip()) < 1000:
+            print(f"PDF text too short after extraction: {pdf_url}")
             return None
 
         return full_text[:50000]
 
     except Exception as e:
-        print(f"PDF extraction failed: {e}")
+        print(f"PDF extraction failed for {pdf_url}: {e}")
         return None
 
 
@@ -446,7 +473,7 @@ for paper in selected_papers:
     title = paper.get("title", "No title")
     abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
 
-    pdf_url = get_pdf_url(paper)
+    pdf_url = get_pdf_urls(paper)
     full_text = None
 
     if pdf_url:
