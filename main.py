@@ -604,7 +604,7 @@ def save_processed_chunks(paper_record):
             }
 
             file.write(
-                json.dumps(chunk_record, ensure_ascii=False") + "\n"
+                json.dumps(chunk_record, ensure_ascii=False) + "\n"
             )
 
 print("\nCollecting papers...\n")
@@ -881,7 +881,8 @@ Paper Text:
     }
 
     save_processed_paper(processed_record)
-
+    save_processed_chunks(processed_record)
+    
     print(paper_text)
     email_content += paper_text
     papers_processed += 1
