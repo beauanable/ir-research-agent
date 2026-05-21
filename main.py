@@ -613,14 +613,14 @@ paper_text = f"""
 <hr>
 """
 
-    print(paper_text)
-    email_content += paper_text
-    papers_processed += 1
+print(paper_text)
+email_content += paper_text
+papers_processed += 1
 
-    unique_id = get_paper_id(paper)
+unique_id = get_paper_id(paper)
 
-    if unique_id:
-        seen_papers.add(unique_id)
+if unique_id:
+    seen_papers.add(unique_id)
 
 
 if papers_processed == 0:
