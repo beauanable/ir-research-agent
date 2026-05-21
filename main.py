@@ -280,7 +280,18 @@ def score_paper(paper, search_term):
     cited_by_count = paper.get("cited_by_count") or 0
     year = paper.get("publication_year") or 0
 
-    combined_text = f"{title} {abstract_text}"
+    pdf_url = get_pdf_url(paper)
+
+    full_text = None
+
+    if pdf_url:
+        full_text = extract_pdf_text(pdf_url)
+
+    combined_text = (
+        f"{title} {full_text}
+        if full_text
+        else f"{title} {abstract_text}"
+    )
 
     strategic_score = calculate_strategic_score(combined_text)
     ir_score = calculate_ir_score(combined_text)
@@ -455,10 +466,13 @@ papers_processed = 0
 for paper in selected_papers:
     title = paper.get("title", "No title")
     abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    pdf_url = get_pdf_url(paper)
+    full_text = None
+    if pdf_url:
+        print(f"Attempting PDF extraction: {pdf_url}")
+        full_text = extract_pdf_text(pdf_url)
     doi = paper.get("doi", "No DOI")
     publication_year = paper.get("publication_year", "Unknown year")
-    journal = get_journal(paper)
-
     journal = get_journal(paper)
 
     authors = []
@@ -487,6 +501,12 @@ for paper in selected_papers:
         continue
 
     is_core_ir = journal in CORE_IR_JOURNALS
+
+analysis_text = (
+    full_text
+    if full_text
+    else abstract_text
+)
 
     prompt = f"""
 You are an elite international relations research assistant.
@@ -557,8 +577,8 @@ Citation count:
 Search topic:
 {search_term}
 
-Abstract:
-{abstract_text}
+Paper Text:
+{analysis_text}
 """
 
     completion = client.chat.completions.create(
