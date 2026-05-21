@@ -280,18 +280,7 @@ def score_paper(paper, search_term):
     cited_by_count = paper.get("cited_by_count") or 0
     year = paper.get("publication_year") or 0
 
-    pdf_url = get_pdf_url(paper)
-
-    full_text = None
-
-    if pdf_url:
-        full_text = extract_pdf_text(pdf_url)
-
-    combined_text = (
-        f"{title} {full_text}"
-        if full_text
-        else f"{title} {abstract_text}"
-    )
+   combined_text = f"{title} {abstract_text}"
 
     strategic_score = calculate_strategic_score(combined_text)
     ir_score = calculate_ir_score(combined_text)
