@@ -2,6 +2,7 @@ import os
 import smtplib
 import json
 import tempfile
+import math
 from email.mime.text import MIMEText
 
 import requests
@@ -568,6 +569,59 @@ def create_embedding(text):
     except Exception as e:
         print(f"Embedding creation failed: {e}")
         return None
+
+def cosine_similarity(vector_a, vector_b):
+    dot_product = sum(a * b for a, b in zip(vector_a, vector_b))
+    magnitude_a = math.sqrt(sum(a * a for a in vector_a))
+    magnitude_b = math.sqrt(sum(b * b for b in vector_b))
+
+    if magnitude_a == 0 or magnitude_b == 0:
+        return 0
+
+    return dot_product / (magnitude_a * magnitude_b)
+
+
+def search_chunks(query, top_k=5):
+    query_embedding = create_embedding(query)
+
+    if query_embedding is None:
+        print("Could not create query embedding.")
+        return []
+
+    results = []
+
+    if not os.path.exists(PROCESSED_CHUNKS_FILE):
+        print(f"{PROCESSED_CHUNKS_FILE} does not exist yet.")
+        return []
+
+    with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as file:
+        for line in file:
+            try:
+                chunk = json.loads(line)
+                chunk_embedding = chunk.get("embedding")
+
+                if not chunk_embedding:
+                    continue
+
+                score = cosine_similarity(query_embedding, chunk_embedding)
+
+                results.append({
+                    "score": score,
+                    "title": chunk.get("title"),
+                    "authors": chunk.get("authors"),
+                    "journal": chunk.get("journal"),
+                    "year": chunk.get("year"),
+                    "doi": chunk.get("doi"),
+                    "chunk_index": chunk.get("chunk_index"),
+                    "chunk_text": chunk.get("chunk_text"),
+                })
+
+            except Exception as e:
+                print(f"Skipping bad chunk line: {e}")
+
+    results.sort(key=lambda item: item["score"], reverse=True)
+
+    return results[:top_k]
 
 def chunk_text(text, max_chars=3000, overlap_chars=400):
     if not text:
