@@ -669,10 +669,33 @@ def save_processed_chunks(paper_record):
 
     chunks = chunk_text(text_for_chunking)
 
+    existing_chunk_ids = set()
+
+if os.path.exists(PROCESSED_CHUNKS_FILE):
+    with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as existing_file:
+        for line in existing_file:
+            try:
+                existing_chunk = json.loads(line)
+                existing_chunk_ids.add(
+                    existing_chunk.get("chunk_id")
+                )
+            except:
+                continue
+
     with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8") as file:
         for index, chunk in enumerate(chunks):
+            chunk_id = create_chunk_id(
+                paper_record,
+                index,
+                chunk
+            )
+            if chunk_id in existing_chunk_ids:
+                print(f"Skipping existing chunk: {chunk_id}")
+                continue
+    
             embedding = create_embedding(chunk)
             chunk_record = {
+                "chunk_id": chunk_id,
                 "title": paper_record.get("title"),
                 "authors": paper_record.get("authors"),
                 "journal": paper_record.get("journal"),
