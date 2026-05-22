@@ -980,6 +980,21 @@ email_content += """
 </html>
 """
 
+print("\nTESTING SEMANTIC SEARCH\n")
+
+test_results = search_chunks(
+    "AI infrastructure and state power",
+    top_k=3
+)
+
+for result in test_results:
+    print("\n====================")
+    print(f"Score: {result['score']}")
+    print(f"Title: {result['title']}")
+    print(f"Journal: {result['journal']}")
+    print(f"Year: {result['year']}")
+    print(f"Chunk:\n{result['chunk_text'][:1000]}")
+
 save_seen_papers(seen_papers)
 
 sender = os.environ["EMAIL_ADDRESS"]
