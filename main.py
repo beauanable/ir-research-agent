@@ -3,6 +3,7 @@ import smtplib
 import json
 import tempfile
 import math
+import hashlib
 from email.mime.text import MIMEText
 
 import requests
@@ -390,6 +391,14 @@ def get_paper_id(paper):
 
     return paper_id.strip().lower()
 
+def create_chunk_id(paper_record, chunk_index, chunk_text):
+    base_text = (
+        f"{paper_record.get('doi') or paper_record.get('title')}"
+        f"_{chunk_index}_"
+        f"{chunk_text[:200]}"
+    )
+
+    return hashlib.sha256(base_text.encode("utf-8")).hexdigest()
 
 def calculate_strategic_score(text):
     score = 0
@@ -979,21 +988,6 @@ email_content += """
 </body>
 </html>
 """
-
-print("\nTESTING SEMANTIC SEARCH\n")
-
-test_results = search_chunks(
-    "AI infrastructure and state power",
-    top_k=3
-)
-
-for result in test_results:
-    print("\n====================")
-    print(f"Score: {result['score']}")
-    print(f"Title: {result['title']}")
-    print(f"Journal: {result['journal']}")
-    print(f"Year: {result['year']}")
-    print(f"Chunk:\n{result['chunk_text'][:1000]}")
 
 save_seen_papers(seen_papers)
 
