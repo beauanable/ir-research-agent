@@ -58,7 +58,22 @@ SEARCH_TERMS = [
     "semiconductor industrial policy",
     "cloud infrastructure geopolitics",
     "AI infrastructure political economy",
-]
+    "semiconductor geopolitics",
+    "semiconductor supply chains national security",
+    "critical minerals geopolitics",
+    "AI infrastructure strategy",
+    "cloud computing national security",
+    "compute power state power",
+    "digital infrastructure geopolitics",
+    "industrial policy semiconductors",
+    "energy infrastructure great power competition",
+    "AI compute governance",
+    "data center infrastructure politics",
+    "technology sovereignty",
+    "strategic autonomy semiconductors",
+    "critical infrastructure resilience",
+    "geoeconomics of technology"
+    ]
 
 CORE_IR_JOURNALS = [
     "International Organization",
