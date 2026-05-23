@@ -114,7 +114,7 @@ Do not include explanations.
     return reranked[:top_k]
 
 
-def answer_question(query):
+def answer_question(query, return_sources=False):
     retrieved = retrieve(query, top_k=20)
     reranked = rerank_chunks(query, retrieved, top_k=5)
 
@@ -156,7 +156,24 @@ Question:
         temperature=0.2
     )
 
-    return response.choices[0].message.content
+    answer = response.choices[0].message.content
+
+    sources = []
+    for score, chunk in reranked:
+        sources.append({
+            "title": chunk.get("title", "Untitled"),
+            "authors": chunk.get("authors", "Unknown"),
+            "journal": chunk.get("journal", "Unknown"),
+            "year": chunk.get("year", "Unknown"),
+            "doi": chunk.get("doi", "Unknown"),
+            "score": round(score, 4),
+            "chunk_index": chunk.get("chunk_index", "Unknown"),
+        })
+
+    if return_sources:
+        return answer, sources
+
+    return answer
 
 
 if __name__ == "__main__":
