@@ -686,16 +686,14 @@ def save_processed_chunks(paper_record):
 
     existing_chunk_ids = set()
 
-if os.path.exists(PROCESSED_CHUNKS_FILE):
-    with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as existing_file:
-        for line in existing_file:
-            try:
-                existing_chunk = json.loads(line)
-                existing_chunk_ids.add(
-                    existing_chunk.get("chunk_id")
-                )
-            except:
-                continue
+    if os.path.exists(PROCESSED_CHUNKS_FILE):
+        with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as existing_file:
+            for line in existing_file:
+                try:
+                    existing_chunk = json.loads(line)
+                    existing_chunk_ids.add(existing_chunk.get("chunk_id"))
+                except:
+                    continue
 
     with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8") as file:
         for index, chunk in enumerate(chunks):
@@ -704,11 +702,13 @@ if os.path.exists(PROCESSED_CHUNKS_FILE):
                 index,
                 chunk
             )
+
             if chunk_id in existing_chunk_ids:
                 print(f"Skipping existing chunk: {chunk_id}")
                 continue
-    
+
             embedding = create_embedding(chunk)
+
             chunk_record = {
                 "chunk_id": chunk_id,
                 "title": paper_record.get("title"),
@@ -723,9 +723,7 @@ if os.path.exists(PROCESSED_CHUNKS_FILE):
                 "embedding": embedding,
             }
 
-            file.write(
-                json.dumps(chunk_record, ensure_ascii=False) + "\n"
-            )
+            file.write(json.dumps(chunk_record, ensure_ascii=False) + "\n")
             print(f"Saved chunk {index} with embedding: {embedding is not None}")
 
 print("\nCollecting papers...\n")
