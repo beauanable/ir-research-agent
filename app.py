@@ -17,6 +17,17 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+        if message["role"] == "assistant" and message.get("sources"):
+            with st.expander("Sources used"):
+                for i, source in enumerate(message["sources"], start=1):
+                    st.markdown(f"**Source {i}: {source['title']}**")
+                    st.markdown(f"Year: {source['year']}")
+                    st.markdown(f"Journal: {source['journal']}")
+                    st.markdown(f"DOI: {source['doi']}")
+                    st.markdown(f"Similarity score: {source['score']}")
+                    st.markdown(f"Chunk index: {source['chunk_index']}")
+                    st.divider()
+
 question = st.chat_input("Ask a research question...")
 
 if question:
@@ -27,7 +38,21 @@ if question:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving, reranking, and answering..."):
-            answer = answer_question(question)
+            answer, sources = answer_question(question, return_sources=True)
             st.markdown(answer)
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+            with st.expander("Sources used"):
+                for i, source in enumerate(sources, start=1):
+                    st.markdown(f"**Source {i}: {source['title']}**")
+                    st.markdown(f"Year: {source['year']}")
+                    st.markdown(f"Journal: {source['journal']}")
+                    st.markdown(f"DOI: {source['doi']}")
+                    st.markdown(f"Similarity score: {source['score']}")
+                    st.markdown(f"Chunk index: {source['chunk_index']}")
+                    st.divider()
+
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": answer,
+        "sources": sources
+    })
