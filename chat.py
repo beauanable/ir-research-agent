@@ -2,16 +2,18 @@ import json
 import math
 import os
 from openai import OpenAI
+from supabase import create_client
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
 
-CHUNKS_FILE = "processed_chunks.jsonl"
 EMBEDDING_MODEL = "text-embedding-3-small"
 RERANK_MODEL = "gpt-4.1-mini"
 ANSWER_MODEL = "gpt-4.1-mini"
 
-# Load chunks once at module import so repeated queries don't re-read the file
+# Cache chunks in memory after first load
 _cached_chunks = None
+
 
 def load_chunks():
     global _cached_chunks
@@ -19,30 +21,21 @@ def load_chunks():
     if _cached_chunks is not None:
         return _cached_chunks
 
-    if not os.path.exists(CHUNKS_FILE):
-        print(f"Chunks file not found: {CHUNKS_FILE}")
+    try:
+        result = supabase.table("chunks").select(
+            "chunk_id, title, authors, journal, year, doi, chunk_index, chunk_text, embedding"
+        ).execute()
+        _cached_chunks = result.data
+        print(f"Loaded {len(_cached_chunks)} chunks from Supabase")
+        return _cached_chunks
+    except Exception as e:
+        print(f"Failed to load chunks from Supabase: {e}")
         _cached_chunks = []
         return _cached_chunks
 
-    chunks = []
-    with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                try:
-                    chunks.append(json.loads(line))
-                except Exception as e:
-                    print(f"Skipping bad chunk line: {e}")
-
-    _cached_chunks = chunks
-    print(f"Loaded {len(chunks)} chunks from {CHUNKS_FILE}")
-    return _cached_chunks
-
 
 def embed_query(query):
-    response = client.embeddings.create(
-        model=EMBEDDING_MODEL,
-        input=query
-    )
+    response = client.embeddings.create(model=EMBEDDING_MODEL, input=query)
     return response.data[0].embedding
 
 
@@ -50,10 +43,8 @@ def cosine_similarity(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(y * y for y in b))
-
     if norm_a == 0 or norm_b == 0:
         return 0
-
     return dot / (norm_a * norm_b)
 
 
@@ -62,13 +53,10 @@ def retrieve(query, top_k=20):
     chunks = load_chunks()
 
     scored = []
-
     for chunk in chunks:
         embedding = chunk.get("embedding")
-
         if not embedding:
             continue
-
         score = cosine_similarity(query_embedding, embedding)
         scored.append((score, chunk))
 
@@ -78,7 +66,6 @@ def retrieve(query, top_k=20):
 
 def rerank_chunks(query, retrieved_results, top_k=5):
     chunk_list = []
-
     for i, (score, chunk) in enumerate(retrieved_results):
         chunk_list.append({
             "id": i,
@@ -121,7 +108,6 @@ Do not include explanations.
         return retrieved_results[:top_k]
 
     reranked = []
-
     for selected_id in selected_ids:
         if isinstance(selected_id, int) and 0 <= selected_id < len(retrieved_results):
             reranked.append(retrieved_results[selected_id])
@@ -212,10 +198,8 @@ Question:
 if __name__ == "__main__":
     while True:
         question = input("\nAsk a question, or type 'quit': ")
-
         if question.lower() in ["quit", "exit"]:
             break
-
         print("\nRetrieving and reranking sources...\n")
         answer, sources = answer_question(question, return_sources=True)
         print(answer)
