@@ -11,6 +11,14 @@ from openai import OpenAI
 from pypdf import PdfReader
 
 
+# Validate required environment variables at startup
+def validate_env():
+    missing = [v for v in ["OPENAI_API_KEY", "EMAIL_ADDRESS", "EMAIL_PASSWORD"] if not os.environ.get(v)]
+    if missing:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
+
+validate_env()
+
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 EMBEDDING_MODEL = "text-embedding-3-small"
@@ -60,20 +68,15 @@ SEARCH_TERMS = [
     "AI infrastructure political economy",
     "semiconductor geopolitics",
     "semiconductor supply chains national security",
-    "critical minerals geopolitics",
     "AI infrastructure strategy",
-    "cloud computing national security",
     "compute power state power",
     "digital infrastructure geopolitics",
-    "industrial policy semiconductors",
-    "energy infrastructure great power competition",
-    "AI compute governance",
     "data center infrastructure politics",
     "technology sovereignty",
     "strategic autonomy semiconductors",
     "critical infrastructure resilience",
-    "geoeconomics of technology"
-    ]
+    "geoeconomics of technology",
+]
 
 CORE_IR_JOURNALS = [
     "International Organization",
@@ -123,7 +126,11 @@ STRATEGIC_KEYWORDS = [
     "industrial policy",
     "compute infrastructure",
     "data centers",
+    "data center",
     "semiconductors",
+    "semiconductor",
+    "chip supply chain",
+    "semiconductor supply chain",
     "energy infrastructure",
     "critical infrastructure",
     "ai governance",
@@ -131,30 +138,22 @@ STRATEGIC_KEYWORDS = [
     "technological sovereignty",
     "supply chains",
     "rare earths",
+    "critical minerals",
     "grid security",
+    "grid resilience",
+    "electric grid",
     "energy transition",
     "geoeconomics",
     "techno-nationalism",
     "strategic autonomy",
     "digital infrastructure",
     "cloud computing",
+    "cloud infrastructure",
     "ai race",
     "national security",
     "energy security",
     "infrastructure resilience",
     "compute power",
-    "data center",
-    "data centers",
-    "semiconductor",
-    "semiconductors",
-    "chip supply chain",
-    "semiconductor supply chain",
-    "critical minerals",
-    "electric grid",
-    "grid resilience",
-    "grid security",
-    "cloud infrastructure",
-    "cloud computing",
     "technology competition",
     "technology strategy",
     "dual-use technology",
@@ -203,6 +202,9 @@ SEEN_PAPERS_FILE = "seen_papers.json"
 PROCESSED_PAPERS_FILE = "processed_papers.jsonl"
 PROCESSED_CHUNKS_FILE = "processed_chunks.jsonl"
 
+MAX_PAPERS_TO_EMAIL = 1
+
+
 def dedupe_urls(urls):
     seen = set()
     clean = []
@@ -235,15 +237,7 @@ def get_pdf_urls(work):
     if open_access.get("oa_url"):
         candidates.append(open_access["oa_url"])
 
-    seen = set()
-    clean = []
-
-    for url in candidates:
-        if url and url not in seen:
-            seen.add(url)
-            clean.append(url)
-
-    return clean
+    return dedupe_urls(candidates)
 
 
 def get_unpaywall_pdf_urls(doi):
@@ -278,15 +272,7 @@ def get_unpaywall_pdf_urls(doi):
             if loc.get("url_for_pdf"):
                 candidates.append(loc["url_for_pdf"])
 
-        seen = set()
-        clean = []
-
-        for url in candidates:
-            if url and url not in seen:
-                seen.add(url)
-                clean.append(url)
-
-        return clean
+        return dedupe_urls(candidates)
 
     except Exception as e:
         print(f"Unpaywall lookup failed for {doi}: {e}")
@@ -371,7 +357,7 @@ def extract_pdf_text(pdf_url):
             print(f"PDF text too short after extraction: {pdf_url}")
             return None
 
-        return full_text[:50000]
+        return full_text[:20000]
 
     except Exception as e:
         print(f"PDF extraction failed for {pdf_url}: {e}")
@@ -406,6 +392,7 @@ def get_paper_id(paper):
 
     return paper_id.strip().lower()
 
+
 def create_chunk_id(paper_record, chunk_index, chunk_text):
     base_text = (
         f"{paper_record.get('doi') or paper_record.get('title')}"
@@ -414,6 +401,7 @@ def create_chunk_id(paper_record, chunk_index, chunk_text):
     )
 
     return hashlib.sha256(base_text.encode("utf-8")).hexdigest()
+
 
 def calculate_strategic_score(text):
     score = 0
@@ -451,6 +439,10 @@ def score_paper(paper, search_term):
     strategic_score = calculate_strategic_score(combined_text)
     ir_score = calculate_ir_score(combined_text)
 
+    # Store scores on paper so should_include_paper can use them
+    paper["strategic_score"] = strategic_score
+    paper["ir_score"] = ir_score
+
     if journal in TIER_1_JOURNALS:
         score += 60
     elif journal in TIER_2_JOURNALS:
@@ -483,9 +475,6 @@ def score_paper(paper, search_term):
         score += 10
     else:
         score -= 20
-
-    paper["strategic_score"] = strategic_score
-    paper["ir_score"] = ir_score
 
     return score
 
@@ -534,35 +523,46 @@ def fetch_papers_for_search(search_term):
     pages_to_fetch = 3
 
     for page_number in range(pages_to_fetch):
-        params = {
-            "filter": "from_publication_date:2024-01-01",
-            "search": search_term,
-            "sort": "cited_by_count:desc",
-            "per-page": 200,
-            "cursor": cursor,
-        }
+        try:
+            params = {
+                "filter": "from_publication_date:2024-01-01",
+                "search": search_term,
+                "sort": "cited_by_count:desc",
+                "per-page": 200,
+                "cursor": cursor,
+            }
 
-        response = requests.get(OPENALEX_URL, params=params)
-        data = response.json()
+            response = requests.get(OPENALEX_URL, params=params, timeout=30)
 
-        if "results" not in data:
-            print("Unexpected OpenAlex response:")
-            print(data)
-            break
+            if response.status_code != 200:
+                print(f"OpenAlex returned status {response.status_code} for '{search_term}' — skipping page {page_number + 1}")
+                break
 
-        for paper in data["results"]:
-            paper["search_term"] = search_term
-            paper["score"] = score_paper(paper, search_term)
+            data = response.json()
 
-            if should_include_paper(paper):
-                papers.append(paper)
+            if "results" not in data:
+                print(f"Unexpected OpenAlex response for '{search_term}':")
+                print(data)
+                break
 
-        cursor = data.get("meta", {}).get("next_cursor")
+            for paper in data["results"]:
+                paper["search_term"] = search_term
+                paper["score"] = score_paper(paper, search_term)
 
-        if not cursor:
+                if should_include_paper(paper):
+                    papers.append(paper)
+
+            cursor = data.get("meta", {}).get("next_cursor")
+
+            if not cursor:
+                break
+
+        except Exception as e:
+            print(f"OpenAlex fetch failed for '{search_term}' page {page_number + 1}: {e}")
             break
 
     return papers
+
 
 def load_seen_papers():
     if not os.path.exists(SEEN_PAPERS_FILE):
@@ -581,6 +581,7 @@ def save_processed_paper(record):
     with open(PROCESSED_PAPERS_FILE, "a", encoding="utf-8") as file:
         file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+
 def create_embedding(text):
     try:
         response = client.embeddings.create(
@@ -593,6 +594,7 @@ def create_embedding(text):
     except Exception as e:
         print(f"Embedding creation failed: {e}")
         return None
+
 
 def cosine_similarity(vector_a, vector_b):
     dot_product = sum(a * b for a, b in zip(vector_a, vector_b))
@@ -647,6 +649,7 @@ def search_chunks(query, top_k=5):
 
     return results[:top_k]
 
+
 def chunk_text(text, max_chars=3000, overlap_chars=400):
     if not text:
         return []
@@ -675,7 +678,24 @@ def chunk_text(text, max_chars=3000, overlap_chars=400):
     return chunks
 
 
-def save_processed_chunks(paper_record):
+def load_existing_chunk_ids():
+    existing_chunk_ids = set()
+
+    if not os.path.exists(PROCESSED_CHUNKS_FILE):
+        return existing_chunk_ids
+
+    with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as existing_file:
+        for line in existing_file:
+            try:
+                existing_chunk = json.loads(line)
+                existing_chunk_ids.add(existing_chunk.get("chunk_id"))
+            except:
+                continue
+
+    return existing_chunk_ids
+
+
+def save_processed_chunks(paper_record, existing_chunk_ids):
     text_for_chunking = (
         paper_record.get("full_text")
         or paper_record.get("abstract")
@@ -684,24 +704,9 @@ def save_processed_chunks(paper_record):
 
     chunks = chunk_text(text_for_chunking)
 
-    existing_chunk_ids = set()
-
-    if os.path.exists(PROCESSED_CHUNKS_FILE):
-        with open(PROCESSED_CHUNKS_FILE, "r", encoding="utf-8") as existing_file:
-            for line in existing_file:
-                try:
-                    existing_chunk = json.loads(line)
-                    existing_chunk_ids.add(existing_chunk.get("chunk_id"))
-                except:
-                    continue
-
     with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8") as file:
         for index, chunk in enumerate(chunks):
-            chunk_id = create_chunk_id(
-                paper_record,
-                index,
-                chunk
-            )
+            chunk_id = create_chunk_id(paper_record, index, chunk)
 
             if chunk_id in existing_chunk_ids:
                 print(f"Skipping existing chunk: {chunk_id}")
@@ -731,7 +736,11 @@ def save_processed_chunks(paper_record):
             }
 
             file.write(json.dumps(chunk_record, ensure_ascii=False) + "\n")
+            existing_chunk_ids.add(chunk_id)
             print(f"Saved chunk {index} with embedding: {embedding is not None}")
+
+
+# ── Main pipeline ──────────────────────────────────────────────────────────────
 
 print("\nCollecting papers...\n")
 
@@ -778,7 +787,10 @@ print(f"Seen papers loaded: {len(seen_papers)}")
 print(f"New papers after seen filter: {len(new_ranked_papers)}")
 
 selected_papers = new_ranked_papers[:30]
-MAX_PAPERS_TO_EMAIL = 1
+
+# Load existing chunk IDs once at startup
+existing_chunk_ids = load_existing_chunk_ids()
+print(f"Existing chunks loaded: {len(existing_chunk_ids)}")
 
 email_content = """
 <html>
@@ -802,88 +814,75 @@ for paper in selected_papers:
     if papers_processed >= MAX_PAPERS_TO_EMAIL:
         break
 
-    title = paper.get("title", "No title")
-    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
-    doi = paper.get("doi", "No DOI")
+    try:
+        title = paper.get("title", "No title")
+        abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
+        doi = paper.get("doi", "No DOI")
 
-    pdf_urls = get_pdf_urls(paper)
+        pdf_urls = get_pdf_urls(paper)
 
-    if doi and doi != "No DOI":
-        pdf_urls.extend(get_unpaywall_pdf_urls(doi))
+        if doi and doi != "No DOI":
+            pdf_urls.extend(get_unpaywall_pdf_urls(doi))
 
-    resolved_urls = []
+        resolved_urls = []
 
-    for url in pdf_urls:
-        if "doi.org" in url:
-            resolved = resolve_doi_to_pdf(url)
+        for url in pdf_urls:
+            if "doi.org" in url:
+                resolved = resolve_doi_to_pdf(url)
 
-            if resolved:
-                resolved_urls.append(resolved)
+                if resolved:
+                    resolved_urls.append(resolved)
 
-        resolved_urls.append(url)
+        pdf_urls.extend(resolved_urls)
+        pdf_urls = dedupe_urls(pdf_urls)
 
-    pdf_urls.extend(resolved_urls)
+        full_text = None
+        pdf_url_used = None
 
-    seen_pdf_urls = set()
-    pdf_urls = [
-        url for url in pdf_urls
-        if url and not (url in seen_pdf_urls or seen_pdf_urls.add(url))
-    ]
+        for pdf_url in pdf_urls:
+            print(f"Attempting PDF extraction: {pdf_url}")
 
-    full_text = None
-    pdf_url_used = None
+            full_text = extract_pdf_text(pdf_url)
 
-    for pdf_url in pdf_urls:
-        print(f"Attempting PDF extraction: {pdf_url}")
+            if full_text:
+                pdf_url_used = pdf_url
+                print(f"PDF extraction succeeded: {pdf_url}")
+                break
 
-        full_text = extract_pdf_text(pdf_url)
+        analysis_source = "Full PDF" if full_text else "Abstract Only"
 
-        if full_text:
-            pdf_url_used = pdf_url
-            print(f"PDF extraction succeeded: {pdf_url}")
-            break
+        publication_year = paper.get("publication_year", "Unknown year")
+        journal = get_journal(paper)
 
-    analysis_source = (
-        "Full PDF"
-        if full_text
-        else "Abstract Only"
-    )
+        authors = []
 
-    publication_year = paper.get("publication_year", "Unknown year")
-    journal = get_journal(paper)
+        for authorship in paper.get("authorships", []):
+            author = authorship.get("author") or {}
+            author_name = author.get("display_name")
 
-    authors = []
+            if author_name:
+                authors.append(author_name)
 
-    for authorship in paper.get("authorships", []):
-        author = authorship.get("author") or {}
-        author_name = author.get("display_name")
+        authors_text = ", ".join(authors[:6])
 
-        if author_name:
-            authors.append(author_name)
+        if len(authors) > 6:
+            authors_text += ", et al."
 
-    authors_text = ", ".join(authors[:6])
+        cited_by_count = paper.get("cited_by_count", 0)
+        search_term = paper.get("search_term", "Unknown")
+        total_score = round(paper.get("score", 0), 2)
+        strategic_score = paper.get("strategic_score", 0)
+        ir_score = paper.get("ir_score", 0)
 
-    if len(authors) > 6:
-        authors_text += ", et al."
+        if not abstract_text and not full_text:
+            print(f"No text available for: {title} — skipping")
+            continue
 
-    cited_by_count = paper.get("cited_by_count", 0)
-    search_term = paper.get("search_term", "Unknown")
-    total_score = round(paper.get("score", 0), 2)
-    strategic_score = paper.get("strategic_score", 0)
-    ir_score = paper.get("ir_score", 0)
+        is_core_ir = journal in CORE_IR_JOURNALS
 
-    if not abstract_text and not full_text:
-        continue
+        analysis_text = full_text if full_text else abstract_text
 
-    is_core_ir = journal in CORE_IR_JOURNALS
-
-    analysis_text = (
-        full_text
-        if full_text
-        else abstract_text
-    )
-
-    prompt = f"""
+        prompt = f"""
 You are an elite international relations research assistant.
 
 Return ONLY valid JSON with this exact structure:
@@ -970,43 +969,43 @@ Paper Text:
 {analysis_text}
 """
 
-    completion = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
+        completion = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+        )
+
+        summary_json = completion.choices[0].message.content
+
+        try:
+            summary_data = json.loads(summary_json)
+        except json.JSONDecodeError:
+            print("JSON parsing failed. Raw model output:")
+            print(summary_json)
+            summary_data = {
+                "main_argument": "Not clearly specified in available text.",
+                "research_design": "Not clearly specified in available text.",
+                "method": "Not clearly specified in available text.",
+                "dataset_or_evidence": "Not clearly specified in available text.",
+                "unit_of_analysis": "Not clearly specified in available text.",
+                "time_period_studied": "Not clearly specified in available text.",
+                "geographic_focus": "Not clearly specified in available text.",
+                "identification_strategy": "Not clearly specified in available text.",
+                "key_findings": "Not clearly specified in available text.",
+                "main_limitations": "Not clearly specified in available text.",
+                "ir_scholars_relevance": "Not clearly specified in available text.",
+                "strategic_infrastructure_relevance": "Not clearly specified in available text.",
+                "summary_html": summary_json,
             }
-        ],
-    )
 
-    summary_json = completion.choices[0].message.content
+        summary = summary_data.get("summary_html", summary_json)
 
-    try:
-        summary_data = json.loads(summary_json)
-    except json.JSONDecodeError:
-        print("JSON parsing failed. Raw model output:")
-        print(summary_json)
-        summary_data = {
-            "main_argument": "Not clearly specified in available text.",
-            "research_design": "Not clearly specified in available text.",
-            "method": "Not clearly specified in available text.",
-            "dataset_or_evidence": "Not clearly specified in available text.",
-            "unit_of_analysis": "Not clearly specified in available text.",
-            "time_period_studied": "Not clearly specified in available text.",
-            "geographic_focus": "Not clearly specified in available text.",
-            "identification_strategy": "Not clearly specified in available text.",
-            "key_findings": "Not clearly specified in available text.",
-            "main_limitations": "Not clearly specified in available text.",
-            "ir_scholars_relevance": "Not clearly specified in available text.",
-            "strategic_infrastructure_relevance": "Not clearly specified in available text.",
-            "summary_html": summary_json,
-        }
-
-    summary = summary_data.get("summary_html", summary_json)
-
-    paper_text = f"""
+        paper_text = f"""
 <h3>{title}</h3>
 
 <p>
@@ -1027,48 +1026,52 @@ Paper Text:
 <hr>
 """
 
-    processed_record = {
-        "title": title,
-        "authors": authors,
-        "journal": journal,
-        "year": publication_year,
-        "doi": doi,
-        "cited_by_count": cited_by_count,
-        "search_term": search_term,
-        "analysis_source": analysis_source,
-        "total_score": total_score,
-        "strategic_score": strategic_score,
-        "ir_score": ir_score,
-        "abstract": abstract_text,
-        "full_text": full_text,
-        "main_argument": summary_data.get("main_argument"),
-        "research_design": summary_data.get("research_design"),
-        "method": summary_data.get("method"),
-        "dataset_or_evidence": summary_data.get("dataset_or_evidence"),
-        "unit_of_analysis": summary_data.get("unit_of_analysis"),
-        "time_period_studied": summary_data.get("time_period_studied"),
-        "geographic_focus": summary_data.get("geographic_focus"),
-        "identification_strategy": summary_data.get("identification_strategy"),
-        "key_findings": summary_data.get("key_findings"),
-        "main_limitations": summary_data.get("main_limitations"),
-        "ir_scholars_relevance": summary_data.get("ir_scholars_relevance"),
-        "strategic_infrastructure_relevance": summary_data.get("strategic_infrastructure_relevance"),
-        "summary_html": summary,
-        "pdf_url_used": pdf_url_used,
-        "pdf_urls_checked": pdf_urls,
-    }
+        processed_record = {
+            "title": title,
+            "authors": authors,
+            "journal": journal,
+            "year": publication_year,
+            "doi": doi,
+            "cited_by_count": cited_by_count,
+            "search_term": search_term,
+            "analysis_source": analysis_source,
+            "total_score": total_score,
+            "strategic_score": strategic_score,
+            "ir_score": ir_score,
+            "abstract": abstract_text,
+            "full_text": full_text,
+            "main_argument": summary_data.get("main_argument"),
+            "research_design": summary_data.get("research_design"),
+            "method": summary_data.get("method"),
+            "dataset_or_evidence": summary_data.get("dataset_or_evidence"),
+            "unit_of_analysis": summary_data.get("unit_of_analysis"),
+            "time_period_studied": summary_data.get("time_period_studied"),
+            "geographic_focus": summary_data.get("geographic_focus"),
+            "identification_strategy": summary_data.get("identification_strategy"),
+            "key_findings": summary_data.get("key_findings"),
+            "main_limitations": summary_data.get("main_limitations"),
+            "ir_scholars_relevance": summary_data.get("ir_scholars_relevance"),
+            "strategic_infrastructure_relevance": summary_data.get("strategic_infrastructure_relevance"),
+            "summary_html": summary,
+            "pdf_url_used": pdf_url_used,
+            "pdf_urls_checked": pdf_urls,
+        }
 
-    save_processed_paper(processed_record)
-    save_processed_chunks(processed_record)
+        save_processed_paper(processed_record)
+        save_processed_chunks(processed_record, existing_chunk_ids)
 
-    print(paper_text)
-    email_content += paper_text
-    papers_processed += 1
+        email_content += paper_text
+        papers_processed += 1
 
-    unique_id = get_paper_id(paper)
+        # Save seen papers after each successful paper in case of crash
+        unique_id = get_paper_id(paper)
+        if unique_id:
+            seen_papers.add(unique_id)
+            save_seen_papers(seen_papers)
 
-    if unique_id:
-        seen_papers.add(unique_id)
+    except Exception as e:
+        print(f"Error processing paper '{paper.get('title', 'Unknown')}': {e}")
+        continue
 
 
 if papers_processed == 0:
@@ -1078,13 +1081,10 @@ if papers_processed == 0:
 <p>You may want to broaden search terms, add journals, or lower the strategic relevance threshold.</p>
 """
 
-
 email_content += """
 </body>
 </html>
 """
-
-save_seen_papers(seen_papers)
 
 sender = os.environ["EMAIL_ADDRESS"]
 password = os.environ["EMAIL_PASSWORD"]
