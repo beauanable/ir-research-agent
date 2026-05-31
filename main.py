@@ -883,7 +883,7 @@ for paper in selected_papers:
         else abstract_text
     )
 
-    prompt = f"""
+prompt = f"""
 You are an elite international relations research assistant.
 
 Return ONLY valid JSON with this exact structure:
