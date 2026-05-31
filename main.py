@@ -883,12 +883,12 @@ for paper in selected_papers:
         else abstract_text
     )
 
-prompt = f"""
+    prompt = f"""
 You are an elite international relations research assistant.
 
 Return ONLY valid JSON with this exact structure:
 
-{
+{{
   "main_argument": "",
   "research_design": "",
   "method": "",
@@ -902,9 +902,11 @@ Return ONLY valid JSON with this exact structure:
   "ir_scholars_relevance": "",
   "strategic_infrastructure_relevance": "",
   "summary_html": ""
-}
+}}
 
-In summary_html, use HTML paragraph formatting with bold labels.
+Each field should be concise, analytical, and specific.
+
+In summary_html, use HTML paragraph formatting with bold labels using this structure:
 
 <p><b>Main argument:</b> ...</p>
 
@@ -928,7 +930,7 @@ In summary_html, use HTML paragraph formatting with bold labels.
 
 <p><b>Why this matters for IR scholars:</b> ...</p>
 
-Only include this final section if the paper is strategically relevant to great power competition,
+Only include this final HTML section if the paper is strategically relevant to great power competition,
 energy infrastructure, compute power, AI governance, state capacity,
 industrial policy, technological competition, or geopolitical strategy:
 
@@ -970,6 +972,7 @@ Paper Text:
 
     completion = client.chat.completions.create(
         model="gpt-4.1-mini",
+        response_format={"type": "json_object"},
         messages=[
             {
                 "role": "user",
@@ -980,30 +983,30 @@ Paper Text:
 
     summary_json = completion.choices[0].message.content
 
-try:
-    summary_data = json.loads(summary_json)
-except json.JSONDecodeError:
-    print("JSON parsing failed. Raw model output:")
-    print(summary_json)
-    summary_data = {
-        "main_argument": "Not clearly specified in available text.",
-        "research_design": "Not clearly specified in available text.",
-        "method": "Not clearly specified in available text.",
-        "dataset_or_evidence": "Not clearly specified in available text.",
-        "unit_of_analysis": "Not clearly specified in available text.",
-        "time_period_studied": "Not clearly specified in available text.",
-        "geographic_focus": "Not clearly specified in available text.",
-        "identification_strategy": "Not clearly specified in available text.",
-        "key_findings": "Not clearly specified in available text.",
-        "main_limitations": "Not clearly specified in available text.",
-        "ir_scholars_relevance": "Not clearly specified in available text.",
-        "strategic_infrastructure_relevance": "Not clearly specified in available text.",
-        "summary_html": summary_json,
-    }
+    try:
+        summary_data = json.loads(summary_json)
+    except json.JSONDecodeError:
+        print("JSON parsing failed. Raw model output:")
+        print(summary_json)
+        summary_data = {
+            "main_argument": "Not clearly specified in available text.",
+            "research_design": "Not clearly specified in available text.",
+            "method": "Not clearly specified in available text.",
+            "dataset_or_evidence": "Not clearly specified in available text.",
+            "unit_of_analysis": "Not clearly specified in available text.",
+            "time_period_studied": "Not clearly specified in available text.",
+            "geographic_focus": "Not clearly specified in available text.",
+            "identification_strategy": "Not clearly specified in available text.",
+            "key_findings": "Not clearly specified in available text.",
+            "main_limitations": "Not clearly specified in available text.",
+            "ir_scholars_relevance": "Not clearly specified in available text.",
+            "strategic_infrastructure_relevance": "Not clearly specified in available text.",
+            "summary_html": summary_json,
+        }
 
-summary = summary_data.get("summary_html", summary_json)
+    summary = summary_data.get("summary_html", summary_json)
 
-paper_text = f"""
+    paper_text = f"""
 <h3>{title}</h3>
 
 <p>
@@ -1057,7 +1060,7 @@ paper_text = f"""
 
     save_processed_paper(processed_record)
     save_processed_chunks(processed_record)
-    
+
     print(paper_text)
     email_content += paper_text
     papers_processed += 1
