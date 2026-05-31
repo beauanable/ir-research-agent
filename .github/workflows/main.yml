@@ -28,10 +28,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: |
           python - <<'PYEOF'
           import os, sys
-          missing = [v for v in ["OPENAI_API_KEY", "EMAIL_ADDRESS", "EMAIL_PASSWORD"] if not os.environ.get(v)]
+          required = ["OPENAI_API_KEY", "EMAIL_ADDRESS", "EMAIL_PASSWORD", "SUPABASE_URL", "SUPABASE_SECRET_KEY"]
+          missing = [v for v in required if not os.environ.get(v)]
           if missing:
               print(f"ERROR: Missing required secrets: {', '.join(missing)}")
               sys.exit(1)
@@ -43,11 +46,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: python main.py
 
       - name: Commit updated research database
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-          git add seen_papers.json processed_papers.jsonl processed_chunks.jsonl
+          git add seen_papers.json processed_papers.jsonl
           git diff --cached --quiet || (git commit -m "Update research database" && git push)
