@@ -1003,7 +1003,7 @@ except json.JSONDecodeError:
 
 summary = summary_data.get("summary_html", summary_json)
 
-    paper_text = f"""
+paper_text = f"""
 <h3>{title}</h3>
 
 <p>
