@@ -10,14 +10,32 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 RERANK_MODEL = "gpt-4.1-mini"
 ANSWER_MODEL = "gpt-4.1-mini"
 
+# Load chunks once at module import so repeated queries don't re-read the file
+_cached_chunks = None
 
 def load_chunks():
+    global _cached_chunks
+
+    if _cached_chunks is not None:
+        return _cached_chunks
+
+    if not os.path.exists(CHUNKS_FILE):
+        print(f"Chunks file not found: {CHUNKS_FILE}")
+        _cached_chunks = []
+        return _cached_chunks
+
     chunks = []
     with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
-                chunks.append(json.loads(line))
-    return chunks
+                try:
+                    chunks.append(json.loads(line))
+                except Exception as e:
+                    print(f"Skipping bad chunk line: {e}")
+
+    _cached_chunks = chunks
+    print(f"Loaded {len(chunks)} chunks from {CHUNKS_FILE}")
+    return _cached_chunks
 
 
 def embed_query(query):
@@ -109,29 +127,39 @@ Do not include explanations.
             reranked.append(retrieved_results[selected_id])
 
     if not reranked:
+        print("Reranker returned no valid IDs. Falling back to similarity ranking.")
         return retrieved_results[:top_k]
+
+    if len(reranked) < top_k:
+        print(f"Warning: reranker returned {len(reranked)} results, expected {top_k}.")
 
     return reranked[:top_k]
 
 
 def answer_question(query, return_sources=False):
-    retrieved = retrieve(query, top_k=20)
-    reranked = rerank_chunks(query, retrieved, top_k=5)
+    try:
+        retrieved = retrieve(query, top_k=20)
 
-    context = "\n\n".join(
-        [
-            f"Source {i + 1}\n"
-            f"Title: {chunk.get('title', 'Untitled')}\n"
-            f"Authors: {chunk.get('authors', 'Unknown')}\n"
-            f"Journal: {chunk.get('journal', 'Unknown')}\n"
-            f"Year: {chunk.get('year', 'Unknown')}\n"
-            f"DOI: {chunk.get('doi', 'Unknown')}\n"
-            f"Text: {chunk.get('chunk_text', '')}"
-            for i, (score, chunk) in enumerate(reranked)
-        ]
-    )
+        if not retrieved:
+            msg = "No relevant sources found in the database. Try running the research agent first to populate it."
+            return (msg, []) if return_sources else msg
 
-    prompt = f"""
+        reranked = rerank_chunks(query, retrieved, top_k=5)
+
+        context = "\n\n".join(
+            [
+                f"Source {i + 1}\n"
+                f"Title: {chunk.get('title', 'Untitled')}\n"
+                f"Authors: {chunk.get('authors', 'Unknown')}\n"
+                f"Journal: {chunk.get('journal', 'Unknown')}\n"
+                f"Year: {chunk.get('year', 'Unknown')}\n"
+                f"DOI: {chunk.get('doi', 'Unknown')}\n"
+                f"Text: {chunk.get('chunk_text', '')}"
+                for i, (score, chunk) in enumerate(reranked)
+            ]
+        )
+
+        prompt = f"""
 You are an international relations research assistant.
 
 Answer the user's question using only the sources below.
@@ -150,30 +178,35 @@ Question:
 {query}
 """
 
-    response = client.chat.completions.create(
-        model=ANSWER_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2
-    )
+        response = client.chat.completions.create(
+            model=ANSWER_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
 
-    answer = response.choices[0].message.content
+        answer = response.choices[0].message.content
 
-    sources = []
-    for score, chunk in reranked:
-        sources.append({
-            "title": chunk.get("title", "Untitled"),
-            "authors": chunk.get("authors", "Unknown"),
-            "journal": chunk.get("journal", "Unknown"),
-            "year": chunk.get("year", "Unknown"),
-            "doi": chunk.get("doi", "Unknown"),
-            "score": round(score, 4),
-            "chunk_index": chunk.get("chunk_index", "Unknown"),
-        })
+        sources = []
+        for score, chunk in reranked:
+            sources.append({
+                "title": chunk.get("title", "Untitled"),
+                "authors": chunk.get("authors", "Unknown"),
+                "journal": chunk.get("journal", "Unknown"),
+                "year": chunk.get("year", "Unknown"),
+                "doi": chunk.get("doi", "Unknown"),
+                "score": round(score, 4),
+                "chunk_index": chunk.get("chunk_index", "Unknown"),
+            })
 
-    if return_sources:
-        return answer, sources
+        if return_sources:
+            return answer, sources
 
-    return answer
+        return answer
+
+    except Exception as e:
+        print(f"answer_question failed: {e}")
+        error_msg = "Something went wrong while retrieving an answer. Please try again."
+        return (error_msg, []) if return_sources else error_msg
 
 
 if __name__ == "__main__":
@@ -184,4 +217,8 @@ if __name__ == "__main__":
             break
 
         print("\nRetrieving and reranking sources...\n")
-        print(answer_question(question))
+        answer, sources = answer_question(question, return_sources=True)
+        print(answer)
+        print(f"\n--- {len(sources)} sources used ---")
+        for i, s in enumerate(sources, 1):
+            print(f"{i}. {s['title']} ({s['year']}) — score: {s['score']}")
