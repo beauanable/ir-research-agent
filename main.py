@@ -202,7 +202,7 @@ GENERAL_IR_KEYWORDS = [
 SEEN_PAPERS_FILE = "seen_papers.json"
 PROCESSED_PAPERS_FILE = "processed_papers.jsonl"
 
-MAX_PAPERS_TO_EMAIL = 1
+MAX_PAPERS_TO_EMAIL = 10
 
 
 def dedupe_urls(urls):
