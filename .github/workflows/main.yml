@@ -1,3 +1,4 @@
+# Runs every Monday at 15:00 UTC (8am Eastern / 7am Central)
 name: Run IR Research Agent
 
 on:
@@ -8,6 +9,7 @@ on:
 jobs:
   run-agent:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repo
@@ -19,22 +21,33 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests openai pypdf
+        run: pip install -r requirements.txt
 
-      - name: Run script
+      - name: Validate required secrets
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: |
+          python - <<'PYEOF'
+          import os, sys
+          missing = [v for v in ["OPENAI_API_KEY", "EMAIL_ADDRESS", "EMAIL_PASSWORD"] if not os.environ.get(v)]
+          if missing:
+              print(f"ERROR: Missing required secrets: {', '.join(missing)}")
+              sys.exit(1)
+          print("All required secrets present.")
+          PYEOF
+
+      - name: Run research agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: python main.py
 
-      - name: Commit updated seen papers
+      - name: Commit updated research database
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
           git add seen_papers.json processed_papers.jsonl processed_chunks.jsonl
-
-          git diff --cached --quiet || git commit -m "Update research database"
-
-          git push
+          git diff --cached --quiet || (git commit -m "Update research database" && git push)
