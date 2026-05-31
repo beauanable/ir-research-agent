@@ -1,0 +1,4 @@
+requests==2.32.3
+openai==1.82.0
+pypdf==5.4.0
+streamlit==1.45.1
