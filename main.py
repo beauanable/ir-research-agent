@@ -718,6 +718,13 @@ def save_processed_chunks(paper_record):
                 "doi": paper_record.get("doi"),
                 "search_term": paper_record.get("search_term"),
                 "analysis_source": paper_record.get("analysis_source"),
+                "research_design": paper_record.get("research_design"),
+                "method": paper_record.get("method"),
+                "dataset_or_evidence": paper_record.get("dataset_or_evidence"),
+                "unit_of_analysis": paper_record.get("unit_of_analysis"),
+                "time_period_studied": paper_record.get("time_period_studied"),
+                "geographic_focus": paper_record.get("geographic_focus"),
+                "identification_strategy": paper_record.get("identification_strategy"),
                 "chunk_index": index,
                 "chunk_text": chunk,
                 "embedding": embedding,
@@ -771,7 +778,7 @@ print(f"Seen papers loaded: {len(seen_papers)}")
 print(f"New papers after seen filter: {len(new_ranked_papers)}")
 
 selected_papers = new_ranked_papers[:30]
-MAX_PAPERS_TO_EMAIL = 8
+MAX_PAPERS_TO_EMAIL = 1
 
 email_content = """
 <html>
@@ -879,11 +886,25 @@ for paper in selected_papers:
     prompt = f"""
 You are an elite international relations research assistant.
 
-Provide the following sections using HTML formatting only.
+Return ONLY valid JSON with this exact structure:
 
-Each section should be concise, analytical, and specific.
+{
+  "main_argument": "",
+  "research_design": "",
+  "method": "",
+  "dataset_or_evidence": "",
+  "unit_of_analysis": "",
+  "time_period_studied": "",
+  "geographic_focus": "",
+  "identification_strategy": "",
+  "key_findings": "",
+  "main_limitations": "",
+  "ir_scholars_relevance": "",
+  "strategic_infrastructure_relevance": "",
+  "summary_html": ""
+}
 
-Use this exact structure:
+In summary_html, use HTML paragraph formatting with bold labels.
 
 <p><b>Main argument:</b> ...</p>
 
@@ -957,7 +978,30 @@ Paper Text:
         ],
     )
 
-    summary = completion.choices[0].message.content
+    summary_json = completion.choices[0].message.content
+
+try:
+    summary_data = json.loads(summary_json)
+except json.JSONDecodeError:
+    print("JSON parsing failed. Raw model output:")
+    print(summary_json)
+    summary_data = {
+        "main_argument": "Not clearly specified in available text.",
+        "research_design": "Not clearly specified in available text.",
+        "method": "Not clearly specified in available text.",
+        "dataset_or_evidence": "Not clearly specified in available text.",
+        "unit_of_analysis": "Not clearly specified in available text.",
+        "time_period_studied": "Not clearly specified in available text.",
+        "geographic_focus": "Not clearly specified in available text.",
+        "identification_strategy": "Not clearly specified in available text.",
+        "key_findings": "Not clearly specified in available text.",
+        "main_limitations": "Not clearly specified in available text.",
+        "ir_scholars_relevance": "Not clearly specified in available text.",
+        "strategic_infrastructure_relevance": "Not clearly specified in available text.",
+        "summary_html": summary_json,
+    }
+
+summary = summary_data.get("summary_html", summary_json)
 
     paper_text = f"""
 <h3>{title}</h3>
@@ -994,6 +1038,18 @@ Paper Text:
         "ir_score": ir_score,
         "abstract": abstract_text,
         "full_text": full_text,
+        "main_argument": summary_data.get("main_argument"),
+        "research_design": summary_data.get("research_design"),
+        "method": summary_data.get("method"),
+        "dataset_or_evidence": summary_data.get("dataset_or_evidence"),
+        "unit_of_analysis": summary_data.get("unit_of_analysis"),
+        "time_period_studied": summary_data.get("time_period_studied"),
+        "geographic_focus": summary_data.get("geographic_focus"),
+        "identification_strategy": summary_data.get("identification_strategy"),
+        "key_findings": summary_data.get("key_findings"),
+        "main_limitations": summary_data.get("main_limitations"),
+        "ir_scholars_relevance": summary_data.get("ir_scholars_relevance"),
+        "strategic_infrastructure_relevance": summary_data.get("strategic_infrastructure_relevance"),
         "summary_html": summary,
         "pdf_url_used": pdf_url_used,
         "pdf_urls_checked": pdf_urls,
