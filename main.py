@@ -534,11 +534,90 @@ def save_chunk_to_supabase(chunk_record):
         print(f"Failed to save chunk to Supabase: {e}")
 
 
-def save_processed_chunks(paper_record, existing_chunk_ids):
-    text_for_chunking = paper_record.get("full_text") or paper_record.get("abstract") or ""
-    chunks = chunk_text(text_for_chunking)
+def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):
+    """
+    Paragraph-aware chunking.
+    - Abstracts are returned as a single chunk.
+    - Full text is split on double newlines (paragraphs) first.
+    - Paragraphs that exceed max_chars are split further at sentence boundaries.
+    - Adjacent paragraphs are merged until they approach max_chars.
+    """
+    if not text:
+        return []
 
-    for index, chunk in enumerate(chunks):
+    text = text.strip()
+
+    # Abstracts are short enough to embed as one unit
+    if is_abstract:
+        return [text]
+
+    # Split on paragraph breaks
+    raw_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    # Further split any paragraph that exceeds max_chars at sentence boundaries
+    paragraphs = []
+    for para in raw_paragraphs:
+        if len(para) <= max_chars:
+            paragraphs.append(para)
+        else:
+            # Split at sentence endings
+            sentences = []
+            current = ""
+            for part in para.replace(". ", ".|").replace("? ", "?|").replace("! ", "!|").split("|"):
+                if len(current) + len(part) + 1 <= max_chars:
+                    current += (" " if current else "") + part
+                else:
+                    if current:
+                        sentences.append(current)
+                    current = part
+            if current:
+                sentences.append(current)
+            paragraphs.extend(sentences)
+
+    # Merge short paragraphs into chunks up to max_chars, with overlap
+    chunks = []
+    current_chunk = ""
+
+    for para in paragraphs:
+        if not current_chunk:
+            current_chunk = para
+        elif len(current_chunk) + len(para) + 2 <= max_chars:
+            current_chunk += "\n\n" + para
+        else:
+            chunks.append(current_chunk)
+            # Overlap: carry last overlap_chars of previous chunk into next
+            overlap = current_chunk[-overlap_chars:] if len(current_chunk) > overlap_chars else current_chunk
+            current_chunk = overlap + "\n\n" + para
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def save_processed_chunks(paper_record, existing_chunk_ids):
+    # Embed abstract as a single dedicated chunk
+    abstract = paper_record.get("abstract") or ""
+    full_text = paper_record.get("full_text") or ""
+
+    chunks_to_embed = []
+
+    if abstract:
+        abstract_chunks = chunk_text(abstract, is_abstract=True)
+        for chunk in abstract_chunks:
+            chunks_to_embed.append(("abstract", chunk))
+
+    if full_text:
+        full_text_chunks = chunk_text(full_text, is_abstract=False)
+        for chunk in full_text_chunks:
+            chunks_to_embed.append(("full_text", chunk))
+
+    # If no full text, abstract chunks are sufficient
+    if not chunks_to_embed:
+        print(f"No text to chunk for: {paper_record.get('title')}")
+        return
+
+    for index, (source_type, chunk) in enumerate(chunks_to_embed):
         chunk_id = create_chunk_id(paper_record, index, chunk)
 
         if chunk_id in existing_chunk_ids:
@@ -556,6 +635,7 @@ def save_processed_chunks(paper_record, existing_chunk_ids):
             "doi": paper_record.get("doi"),
             "search_term": paper_record.get("search_term"),
             "analysis_source": paper_record.get("analysis_source"),
+            "source_type": source_type,
             "research_design": paper_record.get("research_design"),
             "method": paper_record.get("method"),
             "dataset_or_evidence": paper_record.get("dataset_or_evidence"),
@@ -570,29 +650,7 @@ def save_processed_chunks(paper_record, existing_chunk_ids):
 
         save_chunk_to_supabase(chunk_record)
         existing_chunk_ids.add(chunk_id)
-        print(f"Saved chunk {index} with embedding: {embedding is not None}")
-
-
-def chunk_text(text, max_chars=3000, overlap_chars=400):
-    if not text:
-        return []
-    chunks = []
-    start = 0
-    text = text.strip()
-
-    while start < len(text):
-        end = min(start + max_chars, len(text))
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        if end >= len(text):
-            break
-        next_start = end - overlap_chars
-        if next_start <= start:
-            break
-        start = next_start
-
-    return chunks
+        print(f"Saved {source_type} chunk {index} with embedding: {embedding is not None}")
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────────
@@ -634,7 +692,6 @@ print(f"New papers after seen filter: {len(new_ranked_papers)}")
 
 selected_papers = new_ranked_papers[:30]
 
-# Load existing chunk IDs once from Supabase
 existing_chunk_ids = load_existing_chunk_ids()
 print(f"Existing chunks in Supabase: {len(existing_chunk_ids)}")
 
