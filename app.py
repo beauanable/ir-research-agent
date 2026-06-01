@@ -15,6 +15,73 @@ st.set_page_config(
 st.title("📚 IR Research Agent")
 st.caption("Ask questions against your processed IR literature database.")
 
+# ── Method normalisation map ───────────────────────────────────────────────────
+METHOD_CATEGORIES = [
+    "Case Study",
+    "Comparative Case Study",
+    "Process Tracing",
+    "Historical Analysis",
+    "Discourse Analysis",
+    "Content Analysis",
+    "Interview-Based Research",
+    "Regression Analysis",
+    "Time Series Analysis",
+    "Event Study",
+    "Survey / Experiment",
+    "Formal Modeling / Game Theory",
+    "Mixed Methods",
+    "Systematic Literature Review",
+    "Meta-Analysis",
+    "Other",
+]
+
+METHOD_NORMALISATION = {
+    "case study": "Case Study",
+    "single case": "Case Study",
+    "case-study": "Case Study",
+    "comparative case": "Comparative Case Study",
+    "comparative analysis": "Comparative Case Study",
+    "cross-case": "Comparative Case Study",
+    "process trac": "Process Tracing",
+    "historical": "Historical Analysis",
+    "archival": "Historical Analysis",
+    "discourse": "Discourse Analysis",
+    "framing analysis": "Discourse Analysis",
+    "rhetorical": "Discourse Analysis",
+    "content analysis": "Content Analysis",
+    "interview": "Interview-Based Research",
+    "ethnograph": "Interview-Based Research",
+    "qualitative interview": "Interview-Based Research",
+    "regression": "Regression Analysis",
+    "econometric": "Regression Analysis",
+    "quantitative analysis": "Regression Analysis",
+    "statistical": "Regression Analysis",
+    "time series": "Time Series Analysis",
+    "panel data": "Time Series Analysis",
+    "event study": "Event Study",
+    "survey": "Survey / Experiment",
+    "experiment": "Survey / Experiment",
+    "game theory": "Formal Modeling / Game Theory",
+    "formal model": "Formal Modeling / Game Theory",
+    "rational choice": "Formal Modeling / Game Theory",
+    "mixed method": "Mixed Methods",
+    "systematic review": "Systematic Literature Review",
+    "literature review": "Systematic Literature Review",
+    "meta-analysis": "Meta-Analysis",
+    "meta analysis": "Meta-Analysis",
+}
+
+
+def normalise_method(raw_method):
+    if not raw_method:
+        return "Other"
+    lower = raw_method.lower()
+    for keyword, canonical in METHOD_NORMALISATION.items():
+        if keyword in lower:
+            return canonical
+    return "Other"
+
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Filter sources")
@@ -76,16 +143,12 @@ tab_chat, tab_dashboard = st.tabs(["💬 Chat", "📊 Methods & Datasets"])
 # ── Tab 1: Chat ────────────────────────────────────────────────────────────────
 with tab_chat:
 
-    # Landscape report
     if st.session_state.get("generate_landscape"):
         st.session_state["generate_landscape"] = False
-
         with st.spinner("Analysing your research database — this may take a moment..."):
             report = generate_landscape_report(filters=active_filters)
-
         with st.expander("📊 Research Landscape Report", expanded=True):
             st.markdown(report)
-
         st.session_state.setdefault("messages", []).append({
             "role": "assistant",
             "content": report,
@@ -93,18 +156,14 @@ with tab_chat:
             "is_landscape": True,
         })
 
-    # Gap analysis
     if st.session_state.get("run_gap_analysis"):
         research_interest = st.session_state.pop("run_gap_analysis")
-
         with st.spinner("Identifying gaps in the literature — this may take a moment..."):
             gap_report = generate_gap_analysis(research_interest, filters=active_filters)
-
         with st.expander("🔍 Gap Analysis Report", expanded=True):
             st.markdown(f"**Research interest:** {research_interest}")
             st.divider()
             st.markdown(gap_report)
-
         st.session_state.setdefault("messages", []).append({
             "role": "assistant",
             "content": f"**Gap analysis for:** {research_interest}\n\n{gap_report}",
@@ -112,7 +171,6 @@ with tab_chat:
             "is_landscape": True,
         })
 
-    # Chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -140,7 +198,6 @@ with tab_chat:
         st.session_state.messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
-
         with st.chat_message("assistant"):
             with st.spinner("Retrieving, reranking, and answering..."):
                 answer, sources = answer_question(question, return_sources=True, filters=filters)
@@ -158,7 +215,6 @@ with tab_chat:
                         st.markdown(f"Similarity score: {source['score']}")
                         st.markdown(f"Chunk index: {source['chunk_index']}")
                         st.divider()
-
         st.session_state.messages.append({
             "role": "assistant",
             "content": answer,
@@ -179,7 +235,6 @@ with tab_dashboard:
                 "geographic_focus, research_design, unit_of_analysis"
             ).execute()
 
-            # Deduplicate by title
             seen = set()
             papers = []
             for row in result.data:
@@ -205,10 +260,11 @@ with tab_dashboard:
 
         with col1:
             st.markdown("#### Methods")
-            methods = [p.get("method") for p in papers if p.get("method") and p.get("method") != "Not clearly specified in available text."]
-            if methods:
-                method_counts = Counter(methods)
-                for method, count in method_counts.most_common(15):
+            raw_methods = [p.get("method") for p in papers if p.get("method") and p.get("method") != "Not clearly specified in available text."]
+            if raw_methods:
+                normalised = [normalise_method(m) for m in raw_methods]
+                method_counts = Counter(normalised)
+                for method, count in method_counts.most_common():
                     st.markdown(f"- **{method}** ({count})")
             else:
                 st.caption("No method data available yet.")
@@ -252,17 +308,16 @@ with tab_dashboard:
         # ── Full paper table ───────────────────────────────────────────────────
         st.markdown("#### All Papers")
 
-        # Table search
         table_search = st.text_input("Search papers", placeholder="Filter by title, method, journal...")
 
-        # Build display rows
         rows = []
         for p in papers:
             rows.append({
                 "Title": p.get("title") or "",
                 "Year": p.get("year") or "",
                 "Journal": p.get("journal") or "",
-                "Method": p.get("method") or "",
+                "Method (normalised)": normalise_method(p.get("method")),
+                "Method (raw)": p.get("method") or "",
                 "Dataset / Evidence": p.get("dataset_or_evidence") or "",
                 "Geographic Focus": p.get("geographic_focus") or "",
                 "Research Design": p.get("research_design") or "",
@@ -270,7 +325,6 @@ with tab_dashboard:
                 "DOI": p.get("doi") or "",
             })
 
-        # Apply search filter
         if table_search:
             search_lower = table_search.lower()
             rows = [

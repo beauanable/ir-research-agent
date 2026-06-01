@@ -855,6 +855,17 @@ or New Zealand foreign policy:
 If the abstract or paper text does not clearly specify a category,
 explicitly say "Not clearly specified in available text."
 
+For the "method" field, you MUST choose exactly one category from this list:
+Case Study, Comparative Case Study, Process Tracing, Historical Analysis, Discourse Analysis,
+Content Analysis, Interview-Based Research, Regression Analysis, Time Series Analysis,
+Event Study, Survey / Experiment, Formal Modeling / Game Theory, Systematic Literature Review,
+Meta-Analysis, Mixed Methods, Other.
+
+Use "Mixed Methods" ONLY if the paper explicitly and deliberately combines two distinct
+methodological approaches (e.g. interviews plus regression). Do not use it for papers
+that are simply unclear or complex in their methodology — use the single best-fit category instead.
+Use "Other" only if the method genuinely does not fit any category above.
+
 Do not invent methods or datasets.
 Do not use markdown.
 Do not use asterisks.
