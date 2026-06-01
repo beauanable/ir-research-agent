@@ -30,6 +30,7 @@ UNPAYWALL_URL = "https://api.unpaywall.org/v2"
 UNPAYWALL_EMAIL = os.environ["EMAIL_ADDRESS"]
 
 SEARCH_TERMS = [
+    # Core IR and geopolitics
     "AI geopolitics",
     "technology governance international relations",
     "international political economy infrastructure",
@@ -78,6 +79,35 @@ SEARCH_TERMS = [
     "strategic autonomy semiconductors",
     "critical infrastructure resilience",
     "geoeconomics of technology",
+
+    # New Zealand in great power competition
+    "New Zealand foreign policy China United States",
+    "New Zealand Five Eyes geopolitics",
+    "New Zealand strategic autonomy",
+    "New Zealand China relations",
+    "New Zealand United States alliance",
+    "Pacific Islands great power competition",
+    "AUKUS New Zealand",
+    "New Zealand Indo-Pacific policy",
+
+    # Small state and middle power strategy
+    "small state foreign policy great power competition",
+    "small state hedging strategy",
+    "middle power Indo-Pacific strategy",
+    "small state digital economy strategy",
+
+    # Green compute and sustainable infrastructure
+    "green data centers renewable energy geopolitics",
+    "sustainable compute infrastructure",
+    "renewable energy data centers national strategy",
+    "New Zealand renewable energy export",
+    "green hydrogen geopolitics",
+    "carbon neutral computing geopolitics",
+
+    # New Zealand economic positioning
+    "New Zealand trade China decoupling",
+    "New Zealand critical minerals",
+    "Pacific economic statecraft",
 ]
 
 CORE_IR_JOURNALS = [
@@ -163,6 +193,18 @@ STRATEGIC_KEYWORDS = [
     "energy geopolitics",
     "energy statecraft",
     "infrastructure geopolitics",
+    "new zealand",
+    "five eyes",
+    "aukus",
+    "indo-pacific",
+    "small state",
+    "middle power",
+    "pacific islands",
+    "green compute",
+    "green data center",
+    "renewable energy export",
+    "hedging strategy",
+    "economic statecraft",
 ]
 
 TECHNICAL_PENALTY_KEYWORDS = [
@@ -437,13 +479,20 @@ def should_include_paper(paper):
         "geopolitics", "geopolitical", "great power", "national security",
         "state capacity", "industrial policy", "strategic competition",
         "supply chain security", "technological sovereignty", "economic statecraft",
-        "international relations", "foreign policy",
+        "international relations", "foreign policy", "new zealand", "five eyes",
+        "aukus", "indo-pacific", "small state", "middle power", "pacific islands",
+        "hedging", "green compute", "renewable energy export",
     ]
 
     if strategic_score >= 20:
         for term in geopolitical_terms:
             if term in combined_text:
                 return True
+
+    # Always include papers explicitly about New Zealand IR
+    nz_terms = ["new zealand", "aotearoa", "five eyes", "aukus"]
+    if any(term in combined_text for term in nz_terms) and ir_score >= 3:
+        return True
 
     return False
 
@@ -535,32 +584,21 @@ def save_chunk_to_supabase(chunk_record):
 
 
 def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):
-    """
-    Paragraph-aware chunking.
-    - Abstracts are returned as a single chunk.
-    - Full text is split on double newlines (paragraphs) first.
-    - Paragraphs that exceed max_chars are split further at sentence boundaries.
-    - Adjacent paragraphs are merged until they approach max_chars.
-    """
     if not text:
         return []
 
     text = text.strip()
 
-    # Abstracts are short enough to embed as one unit
     if is_abstract:
         return [text]
 
-    # Split on paragraph breaks
     raw_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 
-    # Further split any paragraph that exceeds max_chars at sentence boundaries
     paragraphs = []
     for para in raw_paragraphs:
         if len(para) <= max_chars:
             paragraphs.append(para)
         else:
-            # Split at sentence endings
             sentences = []
             current = ""
             for part in para.replace(". ", ".|").replace("? ", "?|").replace("! ", "!|").split("|"):
@@ -574,7 +612,6 @@ def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):
                 sentences.append(current)
             paragraphs.extend(sentences)
 
-    # Merge short paragraphs into chunks up to max_chars, with overlap
     chunks = []
     current_chunk = ""
 
@@ -585,7 +622,6 @@ def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):
             current_chunk += "\n\n" + para
         else:
             chunks.append(current_chunk)
-            # Overlap: carry last overlap_chars of previous chunk into next
             overlap = current_chunk[-overlap_chars:] if len(current_chunk) > overlap_chars else current_chunk
             current_chunk = overlap + "\n\n" + para
 
@@ -596,23 +632,19 @@ def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):
 
 
 def save_processed_chunks(paper_record, existing_chunk_ids):
-    # Embed abstract as a single dedicated chunk
     abstract = paper_record.get("abstract") or ""
     full_text = paper_record.get("full_text") or ""
 
     chunks_to_embed = []
 
     if abstract:
-        abstract_chunks = chunk_text(abstract, is_abstract=True)
-        for chunk in abstract_chunks:
+        for chunk in chunk_text(abstract, is_abstract=True):
             chunks_to_embed.append(("abstract", chunk))
 
     if full_text:
-        full_text_chunks = chunk_text(full_text, is_abstract=False)
-        for chunk in full_text_chunks:
+        for chunk in chunk_text(full_text, is_abstract=False):
             chunks_to_embed.append(("full_text", chunk))
 
-    # If no full text, abstract chunks are sufficient
     if not chunks_to_embed:
         print(f"No text to chunk for: {paper_record.get('title')}")
         return
@@ -705,7 +737,7 @@ email_content = """
 High-impact core IR journals are always prioritized.<br>
 Adjacent disciplines are included only if strongly related to great power strategy,
 energy infrastructure, compute power, state capacity, strategic technology,
-or geopolitical competition.
+geopolitical competition, or New Zealand foreign policy.
 </p>
 
 <hr>
@@ -815,7 +847,8 @@ In summary_html, use HTML paragraph formatting with bold labels using this struc
 
 Only include this final HTML section if the paper is strategically relevant to great power competition,
 energy infrastructure, compute power, AI governance, state capacity,
-industrial policy, technological competition, or geopolitical strategy:
+industrial policy, technological competition, geopolitical strategy,
+or New Zealand foreign policy:
 
 <p><b>Why this matters for strategic infrastructure research:</b> ...</p>
 
