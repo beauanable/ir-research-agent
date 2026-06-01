@@ -1,5 +1,5 @@
 import streamlit as st
-from chat import answer_question
+from chat import answer_question, generate_landscape_report
 
 st.set_page_config(
     page_title="IR Research Agent",
@@ -10,7 +10,7 @@ st.set_page_config(
 st.title("📚 IR Research Agent")
 st.caption("Ask questions against your processed IR literature database.")
 
-# ── Sidebar filters ────────────────────────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Filter sources")
     st.caption("Narrow the database before searching. Leave blank to search everything.")
@@ -29,7 +29,15 @@ with st.sidebar:
     else:
         st.caption("No filters active — searching full database.")
 
-# Build filters dict to pass to answer_question
+    st.divider()
+
+    st.subheader("Research Landscape")
+    st.caption("Generate a detailed report on topics, methods, datasets, geographic coverage, and gaps across your entire database.")
+
+    if st.button("Generate Research Landscape", use_container_width=True):
+        st.session_state["generate_landscape"] = True
+
+# Build filters dict
 filters = {
     "year_min": year_min,
     "year_max": year_max,
@@ -38,6 +46,24 @@ filters = {
     "method": method_filter or None,
 }
 
+# ── Landscape report ───────────────────────────────────────────────────────────
+if st.session_state.get("generate_landscape"):
+    st.session_state["generate_landscape"] = False
+
+    with st.spinner("Analyzing your research database — this may take a moment..."):
+        report = generate_landscape_report(filters=filters if (filters_active or year_filtered) else None)
+
+    with st.expander("📊 Research Landscape Report", expanded=True):
+        st.markdown(report)
+
+    # Also add to chat history so it's scrollable later
+    st.session_state.setdefault("messages", []).append({
+        "role": "assistant",
+        "content": report,
+        "sources": [],
+        "is_landscape": True,
+    })
+
 # ── Chat interface ─────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -45,7 +71,7 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if message["role"] == "assistant" and message.get("sources"):
+        if message["role"] == "assistant" and message.get("sources") and not message.get("is_landscape"):
             with st.expander("Sources used"):
                 for i, source in enumerate(message["sources"], start=1):
                     st.markdown(f"**Source {i}: {source['title']}**")
@@ -88,5 +114,6 @@ if question:
     st.session_state.messages.append({
         "role": "assistant",
         "content": answer,
-        "sources": sources
+        "sources": sources,
+        "is_landscape": False,
     })

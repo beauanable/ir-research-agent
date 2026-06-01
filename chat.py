@@ -27,7 +27,8 @@ def load_chunks(filters=None):
     try:
         query = supabase.table("chunks").select(
             "chunk_id, title, authors, journal, year, doi, chunk_index, chunk_text, "
-            "embedding, geographic_focus, method, research_design, source_type"
+            "embedding, geographic_focus, method, research_design, source_type, "
+            "dataset_or_evidence, unit_of_analysis, identification_strategy"
         )
 
         if filters:
@@ -172,7 +173,6 @@ def answer_question(query, return_sources=False, filters=None):
 
         reranked = rerank_chunks(query, retrieved, top_k=5)
 
-        # Build numbered source list for the prompt
         source_headers = []
         for i, (score, chunk) in enumerate(reranked):
             authors = chunk.get("authors") or []
@@ -255,6 +255,99 @@ Question:
         print(f"answer_question failed: {e}")
         error_msg = "Something went wrong while retrieving an answer. Please try again."
         return (error_msg, []) if return_sources else error_msg
+
+
+def generate_landscape_report(filters=None):
+    """
+    Pull all paper metadata from Supabase and generate a detailed
+    research landscape report covering topics, methods, datasets,
+    geographic coverage, theoretical frameworks, and gaps.
+    """
+    try:
+        chunks = load_chunks(filters=filters)
+
+        if not chunks:
+            return "No papers in the database yet. Run the research agent first."
+
+        # Deduplicate by title so each paper only appears once
+        seen_titles = set()
+        papers = []
+        for chunk in chunks:
+            title = chunk.get("title") or ""
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                papers.append({
+                    "title": title,
+                    "journal": chunk.get("journal") or "Unknown",
+                    "year": chunk.get("year") or "Unknown",
+                    "method": chunk.get("method") or "Not specified",
+                    "research_design": chunk.get("research_design") or "Not specified",
+                    "dataset_or_evidence": chunk.get("dataset_or_evidence") or "Not specified",
+                    "geographic_focus": chunk.get("geographic_focus") or "Not specified",
+                    "unit_of_analysis": chunk.get("unit_of_analysis") or "Not specified",
+                    "identification_strategy": chunk.get("identification_strategy") or "Not specified",
+                })
+
+        paper_list = json.dumps(papers, ensure_ascii=False, indent=2)
+
+        prompt = f"""
+You are an elite international relations research analyst.
+
+Below is a structured list of {len(papers)} research papers from a personal IR literature database.
+Each entry includes the paper's title, journal, year, method, research design, dataset or evidence,
+geographic focus, unit of analysis, and identification strategy.
+
+Generate a detailed, analytical research landscape report with the following sections:
+
+## 1. Dominant Topics and Themes
+What are the major substantive topics across this literature?
+What themes appear most frequently? Are there clusters of related work?
+
+## 2. Research Methods in Use
+What methods are researchers using (e.g. case study, regression, process tracing, discourse analysis)?
+Which methods dominate? Which are underused relative to the questions being asked?
+
+## 3. Datasets and Evidence Types
+What kinds of evidence are researchers drawing on?
+Are there commonly used datasets? What types of primary sources appear?
+
+## 4. Geographic Coverage
+Which countries, regions, or dyads receive the most attention?
+Which are underrepresented given their strategic importance?
+
+## 5. Theoretical Frameworks
+What theoretical traditions or frameworks appear (e.g. realism, institutionalism, constructivism, IPE)?
+Are there dominant frameworks or notable theoretical diversity?
+
+## 6. Units of Analysis
+What are researchers studying — states, firms, bilateral relationships, international institutions?
+Is there variation or convergence in unit of analysis?
+
+## 7. Apparent Gaps in the Literature
+Based on what is present, what appears to be missing?
+What questions are not being asked? What regions, methods, or topics are underrepresented?
+What would be high-value areas for future research?
+
+Be specific and analytical throughout. Reference paper titles and journals where relevant.
+Write for a graduate-level IR scholar who wants to understand the state of this field
+and identify opportunities for original contribution.
+
+Papers:
+{paper_list}
+"""
+
+        response = client.chat.completions.create(
+            model=ANSWER_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        print(f"generate_landscape_report failed: {e}")
+        return "Something went wrong generating the landscape report. Please try again."
 
 
 if __name__ == "__main__":
