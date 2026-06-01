@@ -1,5 +1,5 @@
 import streamlit as st
-from chat import answer_question, generate_landscape_report
+from chat import answer_question, generate_landscape_report, generate_gap_analysis
 
 st.set_page_config(
     page_title="IR Research Agent",
@@ -37,6 +37,23 @@ with st.sidebar:
     if st.button("Generate Research Landscape", use_container_width=True):
         st.session_state["generate_landscape"] = True
 
+    st.divider()
+
+    st.subheader("Gap Analysis")
+    st.caption("Describe your research interest and get a structured analysis of topical, methodological, geographic, and theoretical gaps in the literature.")
+
+    gap_input = st.text_area(
+        "Your research interest",
+        placeholder="e.g. How New Zealand might position itself in great power competition through green compute infrastructure...",
+        height=120,
+    )
+
+    if st.button("Analyse Gaps", use_container_width=True):
+        if gap_input.strip():
+            st.session_state["run_gap_analysis"] = gap_input.strip()
+        else:
+            st.warning("Please describe your research interest before running the analysis.")
+
 # Build filters dict
 filters = {
     "year_min": year_min,
@@ -46,20 +63,40 @@ filters = {
     "method": method_filter or None,
 }
 
+active_filters = filters if (filters_active or year_filtered) else None
+
 # ── Landscape report ───────────────────────────────────────────────────────────
 if st.session_state.get("generate_landscape"):
     st.session_state["generate_landscape"] = False
 
-    with st.spinner("Analyzing your research database — this may take a moment..."):
-        report = generate_landscape_report(filters=filters if (filters_active or year_filtered) else None)
+    with st.spinner("Analysing your research database — this may take a moment..."):
+        report = generate_landscape_report(filters=active_filters)
 
     with st.expander("📊 Research Landscape Report", expanded=True):
         st.markdown(report)
 
-    # Also add to chat history so it's scrollable later
     st.session_state.setdefault("messages", []).append({
         "role": "assistant",
         "content": report,
+        "sources": [],
+        "is_landscape": True,
+    })
+
+# ── Gap analysis ───────────────────────────────────────────────────────────────
+if st.session_state.get("run_gap_analysis"):
+    research_interest = st.session_state.pop("run_gap_analysis")
+
+    with st.spinner("Identifying gaps in the literature — this may take a moment..."):
+        gap_report = generate_gap_analysis(research_interest, filters=active_filters)
+
+    with st.expander("🔍 Gap Analysis Report", expanded=True):
+        st.markdown(f"**Research interest:** {research_interest}")
+        st.divider()
+        st.markdown(gap_report)
+
+    st.session_state.setdefault("messages", []).append({
+        "role": "assistant",
+        "content": f"**Gap analysis for:** {research_interest}\n\n{gap_report}",
         "sources": [],
         "is_landscape": True,
     })

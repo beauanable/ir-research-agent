@@ -258,18 +258,12 @@ Question:
 
 
 def generate_landscape_report(filters=None):
-    """
-    Pull all paper metadata from Supabase and generate a detailed
-    research landscape report covering topics, methods, datasets,
-    geographic coverage, theoretical frameworks, and gaps.
-    """
     try:
         chunks = load_chunks(filters=filters)
 
         if not chunks:
             return "No papers in the database yet. Run the research agent first."
 
-        # Deduplicate by title so each paper only appears once
         seen_titles = set()
         papers = []
         for chunk in chunks:
@@ -348,6 +342,105 @@ Papers:
     except Exception as e:
         print(f"generate_landscape_report failed: {e}")
         return "Something went wrong generating the landscape report. Please try again."
+
+
+def generate_gap_analysis(research_interest, filters=None):
+    """
+    Given a user-described research interest, pull all paper metadata
+    and generate a structured gap analysis covering topical, methodological,
+    geographic, and theoretical gaps.
+    """
+    try:
+        chunks = load_chunks(filters=filters)
+
+        if not chunks:
+            return "No papers in the database yet. Run the research agent first."
+
+        seen_titles = set()
+        papers = []
+        for chunk in chunks:
+            title = chunk.get("title") or ""
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                papers.append({
+                    "title": title,
+                    "journal": chunk.get("journal") or "Unknown",
+                    "year": chunk.get("year") or "Unknown",
+                    "method": chunk.get("method") or "Not specified",
+                    "research_design": chunk.get("research_design") or "Not specified",
+                    "dataset_or_evidence": chunk.get("dataset_or_evidence") or "Not specified",
+                    "geographic_focus": chunk.get("geographic_focus") or "Not specified",
+                    "unit_of_analysis": chunk.get("unit_of_analysis") or "Not specified",
+                    "identification_strategy": chunk.get("identification_strategy") or "Not specified",
+                })
+
+        paper_list = json.dumps(papers, ensure_ascii=False, indent=2)
+
+        prompt = f"""
+You are an elite international relations research analyst helping a PhD student
+identify gaps in the existing literature relative to their research interest.
+
+The student's research interest is:
+\"\"\"{research_interest}\"\"\"
+
+Below is a structured list of {len(papers)} papers from their personal IR literature database.
+
+Your task is to systematically analyze what the existing literature covers and does NOT cover
+relative to the student's research interest. Be specific, critical, and constructive.
+
+Generate a detailed gap analysis with the following sections:
+
+## 1. What the Existing Literature Covers
+Summarize what is already well-covered in relation to the student's research interest.
+Which aspects of their topic have been studied, and how thoroughly?
+Reference specific papers and journals where relevant.
+
+## 2. Topical Gaps
+What substantive questions related to the student's interest are not being asked?
+What topics, phenomena, or causal mechanisms are underexplored?
+Be specific about what a novel contribution could look like.
+
+## 3. Methodological Gaps
+What methods are being used to study related topics?
+What methods are absent that could generate new insights?
+Are there questions that have only been approached qualitatively that would benefit
+from quantitative treatment, or vice versa?
+
+## 4. Geographic Gaps
+Which countries, regions, or bilateral relationships relevant to the student's interest
+are underrepresented in the literature?
+What comparative cases are missing?
+
+## 5. Theoretical Gaps
+What theoretical frameworks are being applied?
+What theoretical perspectives are absent or underused?
+Are there frameworks from adjacent fields (economics, sociology, science and technology studies)
+that have not been applied to this topic?
+
+## 6. High-Value Research Opportunities
+Based on the gaps identified above, what are the most promising and feasible directions
+for original PhD-level research?
+Rank these by likely contribution to the field and feasibility.
+
+Be specific and actionable throughout. Write for a PhD student who needs concrete
+direction, not general observations.
+
+Papers:
+{paper_list}
+"""
+
+        response = client.chat.completions.create(
+            model=ANSWER_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        print(f"generate_gap_analysis failed: {e}")
+        return "Something went wrong generating the gap analysis. Please try again."
 
 
 if __name__ == "__main__":
