@@ -11,27 +11,56 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 RERANK_MODEL = "gpt-4.1-mini"
 ANSWER_MODEL = "gpt-4.1-mini"
 
+# Metadata fields we boost on if they match the query
+METADATA_BOOST_FIELDS = ["geographic_focus", "method", "research_design"]
+METADATA_BOOST_AMOUNT = 0.05
+
 # Cache chunks in memory after first load
 _cached_chunks = None
 
 
-def load_chunks():
+def load_chunks(filters=None):
+    """
+    Load chunks from Supabase.
+    filters: dict of optional metadata filters e.g.
+      {"year_min": 2024, "year_max": 2025, "journal": "...", "geographic_focus": "...", "method": "..."}
+    Filtered queries bypass the cache since filters change the result set.
+    """
     global _cached_chunks
 
-    if _cached_chunks is not None:
-        return _cached_chunks
+    if not filters:
+        if _cached_chunks is not None:
+            return _cached_chunks
 
     try:
-        result = supabase.table("chunks").select(
-            "chunk_id, title, authors, journal, year, doi, chunk_index, chunk_text, embedding"
-        ).execute()
-        _cached_chunks = result.data
-        print(f"Loaded {len(_cached_chunks)} chunks from Supabase")
-        return _cached_chunks
+        query = supabase.table("chunks").select(
+            "chunk_id, title, authors, journal, year, doi, chunk_index, chunk_text, "
+            "embedding, geographic_focus, method, research_design, source_type"
+        )
+
+        if filters:
+            if filters.get("year_min"):
+                query = query.gte("year", filters["year_min"])
+            if filters.get("year_max"):
+                query = query.lte("year", filters["year_max"])
+            if filters.get("journal"):
+                query = query.ilike("journal", f"%{filters['journal']}%")
+            if filters.get("geographic_focus"):
+                query = query.ilike("geographic_focus", f"%{filters['geographic_focus']}%")
+            if filters.get("method"):
+                query = query.ilike("method", f"%{filters['method']}%")
+
+        result = query.execute()
+
+        if not filters:
+            _cached_chunks = result.data
+            print(f"Loaded {len(_cached_chunks)} chunks from Supabase")
+
+        return result.data
+
     except Exception as e:
         print(f"Failed to load chunks from Supabase: {e}")
-        _cached_chunks = []
-        return _cached_chunks
+        return []
 
 
 def embed_query(query):
@@ -48,9 +77,28 @@ def cosine_similarity(a, b):
     return dot / (norm_a * norm_b)
 
 
-def retrieve(query, top_k=20):
+def metadata_boost(query, chunk):
+    """
+    Add a small boost to the similarity score if metadata fields
+    contain terms from the query.
+    """
+    boost = 0
+    query_lower = query.lower()
+
+    for field in METADATA_BOOST_FIELDS:
+        value = chunk.get(field) or ""
+        if value and any(word in value.lower() for word in query_lower.split() if len(word) > 3):
+            boost += METADATA_BOOST_AMOUNT
+
+    return boost
+
+
+def retrieve(query, top_k=20, filters=None):
     query_embedding = embed_query(query)
-    chunks = load_chunks()
+    chunks = load_chunks(filters=filters)
+
+    if not chunks:
+        return []
 
     scored = []
     for chunk in chunks:
@@ -58,6 +106,7 @@ def retrieve(query, top_k=20):
         if not embedding:
             continue
         score = cosine_similarity(query_embedding, embedding)
+        score += metadata_boost(query, chunk)
         scored.append((score, chunk))
 
     scored.sort(reverse=True, key=lambda x: x[0])
@@ -65,6 +114,9 @@ def retrieve(query, top_k=20):
 
 
 def rerank_chunks(query, retrieved_results, top_k=5):
+    if not retrieved_results:
+        return []
+
     chunk_list = []
     for i, (score, chunk) in enumerate(retrieved_results):
         chunk_list.append({
@@ -72,6 +124,8 @@ def rerank_chunks(query, retrieved_results, top_k=5):
             "title": chunk.get("title", "Untitled"),
             "year": chunk.get("year", "Unknown"),
             "journal": chunk.get("journal", "Unknown"),
+            "geographic_focus": chunk.get("geographic_focus", ""),
+            "method": chunk.get("method", ""),
             "text": chunk.get("chunk_text", "")[:1200],
             "similarity_score": round(score, 4)
         })
@@ -122,12 +176,12 @@ Do not include explanations.
     return reranked[:top_k]
 
 
-def answer_question(query, return_sources=False):
+def answer_question(query, return_sources=False, filters=None):
     try:
-        retrieved = retrieve(query, top_k=20)
+        retrieved = retrieve(query, top_k=20, filters=filters)
 
         if not retrieved:
-            msg = "No relevant sources found in the database. Try running the research agent first to populate it."
+            msg = "No relevant sources found. Try adjusting your filters or running the research agent to add more papers."
             return (msg, []) if return_sources else msg
 
         reranked = rerank_chunks(query, retrieved, top_k=5)
@@ -140,6 +194,8 @@ def answer_question(query, return_sources=False):
                 f"Journal: {chunk.get('journal', 'Unknown')}\n"
                 f"Year: {chunk.get('year', 'Unknown')}\n"
                 f"DOI: {chunk.get('doi', 'Unknown')}\n"
+                f"Geographic focus: {chunk.get('geographic_focus', 'Not specified')}\n"
+                f"Method: {chunk.get('method', 'Not specified')}\n"
                 f"Text: {chunk.get('chunk_text', '')}"
                 for i, (score, chunk) in enumerate(reranked)
             ]
@@ -180,6 +236,8 @@ Question:
                 "journal": chunk.get("journal", "Unknown"),
                 "year": chunk.get("year", "Unknown"),
                 "doi": chunk.get("doi", "Unknown"),
+                "geographic_focus": chunk.get("geographic_focus", ""),
+                "method": chunk.get("method", ""),
                 "score": round(score, 4),
                 "chunk_index": chunk.get("chunk_index", "Unknown"),
             })
