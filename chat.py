@@ -11,21 +11,13 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 RERANK_MODEL = "gpt-4.1-mini"
 ANSWER_MODEL = "gpt-4.1-mini"
 
-# Metadata fields we boost on if they match the query
 METADATA_BOOST_FIELDS = ["geographic_focus", "method", "research_design"]
 METADATA_BOOST_AMOUNT = 0.05
 
-# Cache chunks in memory after first load
 _cached_chunks = None
 
 
 def load_chunks(filters=None):
-    """
-    Load chunks from Supabase.
-    filters: dict of optional metadata filters e.g.
-      {"year_min": 2024, "year_max": 2025, "journal": "...", "geographic_focus": "...", "method": "..."}
-    Filtered queries bypass the cache since filters change the result set.
-    """
     global _cached_chunks
 
     if not filters:
@@ -78,18 +70,12 @@ def cosine_similarity(a, b):
 
 
 def metadata_boost(query, chunk):
-    """
-    Add a small boost to the similarity score if metadata fields
-    contain terms from the query.
-    """
     boost = 0
     query_lower = query.lower()
-
     for field in METADATA_BOOST_FIELDS:
         value = chunk.get(field) or ""
         if value and any(word in value.lower() for word in query_lower.split() if len(word) > 3):
             boost += METADATA_BOOST_AMOUNT
-
     return boost
 
 
@@ -186,14 +172,30 @@ def answer_question(query, return_sources=False, filters=None):
 
         reranked = rerank_chunks(query, retrieved, top_k=5)
 
+        # Build numbered source list for the prompt
+        source_headers = []
+        for i, (score, chunk) in enumerate(reranked):
+            authors = chunk.get("authors") or []
+            if isinstance(authors, list):
+                if len(authors) == 0:
+                    author_str = "Unknown"
+                elif len(authors) == 1:
+                    author_str = authors[0]
+                elif len(authors) == 2:
+                    author_str = f"{authors[0]} & {authors[1]}"
+                else:
+                    author_str = f"{authors[0]} et al."
+            else:
+                author_str = str(authors)
+
+            source_headers.append(
+                f"[{i+1}] {author_str}, \"{chunk.get('title', 'Untitled')}\", "
+                f"{chunk.get('journal', 'Unknown journal')}, {chunk.get('year', 'n.d.')}"
+            )
+
         context = "\n\n".join(
             [
-                f"Source {i + 1}\n"
-                f"Title: {chunk.get('title', 'Untitled')}\n"
-                f"Authors: {chunk.get('authors', 'Unknown')}\n"
-                f"Journal: {chunk.get('journal', 'Unknown')}\n"
-                f"Year: {chunk.get('year', 'Unknown')}\n"
-                f"DOI: {chunk.get('doi', 'Unknown')}\n"
+                f"[{i+1}] {' | '.join(source_headers[i:i+1])}\n"
                 f"Geographic focus: {chunk.get('geographic_focus', 'Not specified')}\n"
                 f"Method: {chunk.get('method', 'Not specified')}\n"
                 f"Text: {chunk.get('chunk_text', '')}"
@@ -202,16 +204,18 @@ def answer_question(query, return_sources=False, filters=None):
         )
 
         prompt = f"""
-You are an international relations research assistant.
+You are an international relations research assistant writing for a graduate-level audience.
 
-Answer the user's question using only the sources below.
+Answer the user's question using only the numbered sources below.
 
-Rules:
-- Do not invent evidence.
-- If the sources are insufficient, say so clearly.
-- Cite paper titles and years when possible.
+Citation rules:
+- Cite sources inline using bracketed numbers, e.g. [1], [2], [1,3].
+- Every factual claim must have at least one inline citation.
+- Do not save all citations for the end — place them immediately after the claim they support.
+- If two sources support the same claim, cite both: [1,2].
+- If the sources are insufficient to answer the question, say so explicitly.
+- Do not invent evidence or cite sources for claims they do not support.
 - Distinguish between strong evidence, partial evidence, and speculation.
-- Keep the answer analytical and useful for graduate-level research.
 
 Sources:
 {context}
