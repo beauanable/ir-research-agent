@@ -32,6 +32,8 @@ METHOD_CATEGORIES = [
     "Mixed Methods",
     "Systematic Literature Review",
     "Meta-Analysis",
+    "Conceptual / Theoretical",
+    "Policy Analysis",
     "Other",
 ]
 
@@ -69,6 +71,14 @@ METHOD_NORMALISATION = {
     "literature review": "Systematic Literature Review",
     "meta-analysis": "Meta-Analysis",
     "meta analysis": "Meta-Analysis",
+    "conceptual": "Conceptual / Theoretical",
+    "theoretical": "Conceptual / Theoretical",
+    "theory": "Conceptual / Theoretical",
+    "normative": "Conceptual / Theoretical",
+    "analytical framework": "Conceptual / Theoretical",
+    "policy analysis": "Policy Analysis",
+    "policy review": "Policy Analysis",
+    "policy assessment": "Policy Analysis",
 }
 
 

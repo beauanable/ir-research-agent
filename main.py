@@ -859,7 +859,7 @@ For the "method" field, you MUST choose exactly one category from this list:
 Case Study, Comparative Case Study, Process Tracing, Historical Analysis, Discourse Analysis,
 Content Analysis, Interview-Based Research, Regression Analysis, Time Series Analysis,
 Event Study, Survey / Experiment, Formal Modeling / Game Theory, Systematic Literature Review,
-Meta-Analysis, Mixed Methods, Other.
+Meta-Analysis, Mixed Methods, Conceptual / Theoretical, Policy Analysis, Other.
 
 Use "Mixed Methods" ONLY if the paper explicitly and deliberately combines two distinct
 methodological approaches (e.g. interviews plus regression). Do not use it for papers
