@@ -327,7 +327,12 @@ with tab_chat:
             st.markdown(question)
         with st.chat_message("assistant"):
             with st.spinner("Retrieving, reranking, and answering..."):
-                answer, sources = answer_question(question, return_sources=True, filters=filters)
+                answer, sources = answer_question(
+                                question,
+                                return_sources=True,
+                                filters=filters,
+                                conversation_history=st.session_state.get("messages", [])
+                            )
                 st.markdown(answer)
                 with st.expander("Sources used"):
                     for i, source in enumerate(sources, start=1):

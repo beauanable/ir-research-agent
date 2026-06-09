@@ -163,7 +163,36 @@ Do not include explanations.
     return reranked[:top_k]
 
 
-def answer_question(query, return_sources=False, filters=None):
+def format_conversation_history(messages):
+    """
+    Format Streamlit message history into a conversation string for the LLM.
+    Includes Q&A, landscape reports, and gap analyses.
+    Truncates to last 6000 characters to stay within token limits.
+    """
+    if not messages:
+        return ""
+
+    lines = []
+    for msg in messages:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        content = msg.get("content", "")
+
+        # Truncate very long individual messages (e.g. full landscape reports)
+        if len(content) > 2000:
+            content = content[:2000] + "... [truncated for brevity]"
+
+        lines.append(f"{role}: {content}")
+
+    history_text = "\n\n".join(lines)
+
+    # Keep only the last 6000 characters if history is very long
+    if len(history_text) > 6000:
+        history_text = "...[earlier conversation truncated]...\n\n" + history_text[-6000:]
+
+    return history_text
+
+
+def answer_question(query, return_sources=False, filters=None, conversation_history=None):
     try:
         retrieved = retrieve(query, top_k=20, filters=filters)
 
@@ -203,10 +232,25 @@ def answer_question(query, return_sources=False, filters=None):
             ]
         )
 
+        # Build conversation history section
+        history_section = ""
+        if conversation_history:
+            history_text = format_conversation_history(conversation_history)
+            if history_text:
+                history_section = f"""
+Previous conversation:
+{history_text}
+
+---
+"""
+
         prompt = f"""
 You are an international relations research assistant writing for a graduate-level audience.
 
-Answer the user's question using only the numbered sources below.
+{history_section}
+Answer the user's current question using the numbered sources below.
+If the question refers to something discussed earlier in the conversation, 
+use that context to give a more precise and relevant answer.
 
 Citation rules:
 - Cite sources inline using bracketed numbers, e.g. [1], [2], [1,3].
@@ -220,7 +264,7 @@ Citation rules:
 Sources:
 {context}
 
-Question:
+Current question:
 {query}
 """
 
@@ -294,37 +338,15 @@ geographic focus, unit of analysis, and identification strategy.
 Generate a detailed, analytical research landscape report with the following sections:
 
 ## 1. Dominant Topics and Themes
-What are the major substantive topics across this literature?
-What themes appear most frequently? Are there clusters of related work?
-
 ## 2. Research Methods in Use
-What methods are researchers using (e.g. case study, regression, process tracing, discourse analysis)?
-Which methods dominate? Which are underused relative to the questions being asked?
-
 ## 3. Datasets and Evidence Types
-What kinds of evidence are researchers drawing on?
-Are there commonly used datasets? What types of primary sources appear?
-
 ## 4. Geographic Coverage
-Which countries, regions, or dyads receive the most attention?
-Which are underrepresented given their strategic importance?
-
 ## 5. Theoretical Frameworks
-What theoretical traditions or frameworks appear (e.g. realism, institutionalism, constructivism, IPE)?
-Are there dominant frameworks or notable theoretical diversity?
-
 ## 6. Units of Analysis
-What are researchers studying — states, firms, bilateral relationships, international institutions?
-Is there variation or convergence in unit of analysis?
-
 ## 7. Apparent Gaps in the Literature
-Based on what is present, what appears to be missing?
-What questions are not being asked? What regions, methods, or topics are underrepresented?
-What would be high-value areas for future research?
 
 Be specific and analytical throughout. Reference paper titles and journals where relevant.
-Write for a graduate-level IR scholar who wants to understand the state of this field
-and identify opportunities for original contribution.
+Write for a graduate-level IR scholar.
 
 Papers:
 {paper_list}
@@ -345,11 +367,6 @@ Papers:
 
 
 def generate_gap_analysis(research_interest, filters=None):
-    """
-    Given a user-described research interest, pull all paper metadata
-    and generate a structured gap analysis covering topical, methodological,
-    geographic, and theoretical gaps.
-    """
     try:
         chunks = load_chunks(filters=filters)
 
@@ -385,45 +402,16 @@ The student's research interest is:
 
 Below is a structured list of {len(papers)} papers from their personal IR literature database.
 
-Your task is to systematically analyze what the existing literature covers and does NOT cover
-relative to the student's research interest. Be specific, critical, and constructive.
-
 Generate a detailed gap analysis with the following sections:
 
 ## 1. What the Existing Literature Covers
-Summarize what is already well-covered in relation to the student's research interest.
-Which aspects of their topic have been studied, and how thoroughly?
-Reference specific papers and journals where relevant.
-
 ## 2. Topical Gaps
-What substantive questions related to the student's interest are not being asked?
-What topics, phenomena, or causal mechanisms are underexplored?
-Be specific about what a novel contribution could look like.
-
 ## 3. Methodological Gaps
-What methods are being used to study related topics?
-What methods are absent that could generate new insights?
-Are there questions that have only been approached qualitatively that would benefit
-from quantitative treatment, or vice versa?
-
 ## 4. Geographic Gaps
-Which countries, regions, or bilateral relationships relevant to the student's interest
-are underrepresented in the literature?
-What comparative cases are missing?
-
 ## 5. Theoretical Gaps
-What theoretical frameworks are being applied?
-What theoretical perspectives are absent or underused?
-Are there frameworks from adjacent fields (economics, sociology, science and technology studies)
-that have not been applied to this topic?
-
 ## 6. High-Value Research Opportunities
-Based on the gaps identified above, what are the most promising and feasible directions
-for original PhD-level research?
-Rank these by likely contribution to the field and feasibility.
 
-Be specific and actionable throughout. Write for a PhD student who needs concrete
-direction, not general observations.
+Be specific and actionable throughout. Write for a PhD student who needs concrete direction.
 
 Papers:
 {paper_list}
