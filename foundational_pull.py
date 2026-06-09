@@ -280,10 +280,18 @@ def save_chunks_to_supabase(paper_record, existing_chunk_ids):
     return saved
 
 
+def get_journal_name(paper):
+    """Extract journal name from paper's primary location."""
+    primary = paper.get("primary_location") or {}
+    source = primary.get("source") or {}
+    return source.get("display_name", "")
+
+
 def fetch_top_papers():
     """
     Fetch the top cited papers from top IR journals between YEAR_MIN and YEAR_MAX.
-    Pulls from each journal separately then merges and sorts by citation count.
+    Searches each journal by name, fetches top results by citation count,
+    then filters in Python to confirm journal match.
     """
     all_papers = []
 
@@ -291,13 +299,13 @@ def fetch_top_papers():
         print(f"\nFetching from: {journal}")
         try:
             params = {
+                "search": journal,
                 "filter": (
-                    f"primary_location.source.display_name.search:{journal},"
                     f"from_publication_date:{YEAR_MIN}-01-01,"
                     f"to_publication_date:{YEAR_MAX}-12-31"
                 ),
                 "sort": "cited_by_count:desc",
-                "per-page": 50,
+                "per-page": 100,
             }
             response = requests.get(OPENALEX_URL, params=params, timeout=30)
 
@@ -311,11 +319,17 @@ def fetch_top_papers():
                 print(f"No results for {journal}")
                 continue
 
+            # Filter in Python to confirm journal match
+            journal_lower = journal.lower()
+            matched = []
             for paper in data["results"]:
-                paper["_source_journal"] = journal
-                all_papers.append(paper)
+                paper_journal = get_journal_name(paper).lower()
+                if journal_lower in paper_journal or paper_journal in journal_lower:
+                    paper["_source_journal"] = journal
+                    matched.append(paper)
 
-            print(f"Found {len(data['results'])} papers from {journal}")
+            all_papers.extend(matched)
+            print(f"Found {len(matched)} confirmed papers from {journal} (out of {len(data['results'])} results)")
 
         except Exception as e:
             print(f"Failed to fetch {journal}: {e}")
