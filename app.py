@@ -2,9 +2,16 @@ import streamlit as st
 from collections import Counter
 from chat import answer_question, generate_landscape_report, generate_gap_analysis
 from supabase import create_client
+from openai import OpenAI
+from pypdf import PdfReader
+import hashlib
+import tempfile
 import os
 
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+EMBEDDING_MODEL = "text-embedding-3-small"
 
 st.set_page_config(
     page_title="IR Research Agent",
@@ -15,28 +22,7 @@ st.set_page_config(
 st.title("📚 IR Research Agent")
 st.caption("Ask questions against your processed IR literature database.")
 
-# ── Method normalisation map ───────────────────────────────────────────────────
-METHOD_CATEGORIES = [
-    "Case Study",
-    "Comparative Case Study",
-    "Process Tracing",
-    "Historical Analysis",
-    "Discourse Analysis",
-    "Content Analysis",
-    "Interview-Based Research",
-    "Regression Analysis",
-    "Time Series Analysis",
-    "Event Study",
-    "Survey / Experiment",
-    "Formal Modeling / Game Theory",
-    "Mixed Methods",
-    "Systematic Literature Review",
-    "Meta-Analysis",
-    "Conceptual / Theoretical",
-    "Policy Analysis",
-    "Other",
-]
-
+# ── Method normalisation ───────────────────────────────────────────────────────
 METHOD_NORMALISATION = {
     "case study": "Case Study",
     "single case": "Case Study",
@@ -92,13 +78,144 @@ def normalise_method(raw_method):
     return "Other"
 
 
+# ── PDF upload helpers ─────────────────────────────────────────────────────────
+def extract_text_from_pdf(uploaded_file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_file.read())
+        tmp_path = tmp.name
+
+    reader = PdfReader(tmp_path)
+    full_text = ""
+
+    for page in reader.pages:
+        try:
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
+        except Exception:
+            continue
+
+    os.unlink(tmp_path)
+    return full_text.strip()
+
+
+def create_embedding(text):
+    try:
+        response = client.embeddings.create(model=EMBEDDING_MODEL, input=text)
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Embedding failed: {e}")
+        return None
+
+
+def create_chunk_id(title, chunk_index, chunk_text):
+    base = f"{title}_{chunk_index}_{chunk_text[:200]}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
+def chunk_text(text, max_chars=3000, overlap_chars=300):
+    if not text:
+        return []
+
+    text = text.strip()
+    raw_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    paragraphs = []
+    for para in raw_paragraphs:
+        if len(para) <= max_chars:
+            paragraphs.append(para)
+        else:
+            current = ""
+            for part in para.replace(". ", ".|").replace("? ", "?|").replace("! ", "!|").split("|"):
+                if len(current) + len(part) + 1 <= max_chars:
+                    current += (" " if current else "") + part
+                else:
+                    if current:
+                        paragraphs.append(current)
+                    current = part
+            if current:
+                paragraphs.append(current)
+
+    chunks = []
+    current_chunk = ""
+
+    for para in paragraphs:
+        if not current_chunk:
+            current_chunk = para
+        elif len(current_chunk) + len(para) + 2 <= max_chars:
+            current_chunk += "\n\n" + para
+        else:
+            chunks.append(current_chunk)
+            overlap = current_chunk[-overlap_chars:] if len(current_chunk) > overlap_chars else current_chunk
+            current_chunk = overlap + "\n\n" + para
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def upload_pdf_to_supabase(text, metadata):
+    chunks = chunk_text(text)
+
+    if not chunks:
+        return 0, 0
+
+    saved = 0
+    skipped = 0
+
+    for index, chunk in enumerate(chunks):
+        chunk_id = create_chunk_id(metadata["title"], index, chunk)
+
+        # Check if chunk already exists
+        try:
+            existing = supabase.table("chunks").select("chunk_id").eq("chunk_id", chunk_id).execute()
+            if existing.data:
+                skipped += 1
+                continue
+        except Exception:
+            pass
+
+        embedding = create_embedding(chunk)
+
+        record = {
+            "chunk_id": chunk_id,
+            "title": metadata["title"],
+            "authors": metadata["authors"],
+            "journal": None,
+            "year": metadata["year"],
+            "doi": metadata.get("doi") or None,
+            "search_term": "manual upload",
+            "analysis_source": "Full PDF",
+            "source_type": metadata["source_type"],
+            "research_design": metadata.get("research_design") or None,
+            "method": metadata.get("method") or None,
+            "dataset_or_evidence": None,
+            "unit_of_analysis": None,
+            "time_period_studied": None,
+            "geographic_focus": metadata.get("geographic_focus") or None,
+            "identification_strategy": None,
+            "chunk_index": index,
+            "chunk_text": chunk,
+            "embedding": embedding,
+        }
+
+        try:
+            supabase.table("chunks").upsert(record).execute()
+            saved += 1
+        except Exception as e:
+            st.warning(f"Failed to save chunk {index}: {e}")
+
+    return saved, skipped
+
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Filter sources")
     st.caption("Narrow the database before searching. Leave blank to search everything.")
 
-    year_min = st.number_input("Year from", min_value=2000, max_value=2026, value=2024, step=1)
-    year_max = st.number_input("Year to", min_value=2000, max_value=2026, value=2026, step=1)
+    year_min = st.number_input("Year from", min_value=1950, max_value=2026, value=2024, step=1)
+    year_max = st.number_input("Year to", min_value=1950, max_value=2026, value=2026, step=1)
     journal_filter = st.text_input("Journal (partial match)", placeholder="e.g. International Security")
     geo_filter = st.text_input("Geographic focus (partial match)", placeholder="e.g. China")
     method_filter = st.text_input("Method (partial match)", placeholder="e.g. case study")
@@ -148,7 +265,7 @@ filters = {
 active_filters = filters if (filters_active or year_filtered) else None
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_chat, tab_dashboard = st.tabs(["💬 Chat", "📊 Methods & Datasets"])
+tab_chat, tab_dashboard, tab_upload = st.tabs(["💬 Chat", "📊 Methods & Datasets", "📥 Upload PDF"])
 
 # ── Tab 1: Chat ────────────────────────────────────────────────────────────────
 with tab_chat:
@@ -242,7 +359,7 @@ with tab_dashboard:
         try:
             result = supabase.table("chunks").select(
                 "title, authors, journal, year, doi, method, dataset_or_evidence, "
-                "geographic_focus, research_design, unit_of_analysis"
+                "geographic_focus, research_design, unit_of_analysis, source_type"
             ).execute()
 
             seen = set()
@@ -263,9 +380,18 @@ with tab_dashboard:
     if not papers:
         st.info("No papers in the database yet. Run the research agent first.")
     else:
-        st.markdown(f"**{len(papers)} papers in database**")
+        # Split by source type
+        journal_papers = [p for p in papers if p.get("source_type") not in ("textbook", "foundational")]
+        textbooks = [p for p in papers if p.get("source_type") == "textbook"]
+        foundational = [p for p in papers if p.get("source_type") == "foundational"]
 
-        # ── Summary counts ─────────────────────────────────────────────────────
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Journal Articles", len(journal_papers))
+        col_b.metric("Textbooks", len(textbooks))
+        col_c.metric("Foundational Papers", len(foundational))
+
+        st.divider()
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -273,8 +399,7 @@ with tab_dashboard:
             raw_methods = [p.get("method") for p in papers if p.get("method") and p.get("method") != "Not clearly specified in available text."]
             if raw_methods:
                 normalised = [normalise_method(m) for m in raw_methods]
-                method_counts = Counter(normalised)
-                for method, count in method_counts.most_common():
+                for method, count in Counter(normalised).most_common():
                     st.markdown(f"- **{method}** ({count})")
             else:
                 st.caption("No method data available yet.")
@@ -283,8 +408,7 @@ with tab_dashboard:
             st.markdown("#### Datasets & Evidence Types")
             datasets = [p.get("dataset_or_evidence") for p in papers if p.get("dataset_or_evidence") and p.get("dataset_or_evidence") != "Not clearly specified in available text."]
             if datasets:
-                dataset_counts = Counter(datasets)
-                for dataset, count in dataset_counts.most_common(15):
+                for dataset, count in Counter(datasets).most_common(15):
                     st.markdown(f"- **{dataset}** ({count})")
             else:
                 st.caption("No dataset data available yet.")
@@ -297,8 +421,7 @@ with tab_dashboard:
             st.markdown("#### Geographic Focus")
             geos = [p.get("geographic_focus") for p in papers if p.get("geographic_focus") and p.get("geographic_focus") != "Not clearly specified in available text."]
             if geos:
-                geo_counts = Counter(geos)
-                for geo, count in geo_counts.most_common(15):
+                for geo, count in Counter(geos).most_common(15):
                     st.markdown(f"- **{geo}** ({count})")
             else:
                 st.caption("No geographic focus data available yet.")
@@ -307,17 +430,14 @@ with tab_dashboard:
             st.markdown("#### Research Design")
             designs = [p.get("research_design") for p in papers if p.get("research_design") and p.get("research_design") != "Not clearly specified in available text."]
             if designs:
-                design_counts = Counter(designs)
-                for design, count in design_counts.most_common(15):
+                for design, count in Counter(designs).most_common(15):
                     st.markdown(f"- **{design}** ({count})")
             else:
                 st.caption("No research design data available yet.")
 
         st.divider()
 
-        # ── Full paper table ───────────────────────────────────────────────────
         st.markdown("#### All Papers")
-
         table_search = st.text_input("Search papers", placeholder="Filter by title, method, journal...")
 
         rows = []
@@ -326,6 +446,7 @@ with tab_dashboard:
                 "Title": p.get("title") or "",
                 "Year": p.get("year") or "",
                 "Journal": p.get("journal") or "",
+                "Source Type": p.get("source_type") or "",
                 "Method (normalised)": normalise_method(p.get("method")),
                 "Method (raw)": p.get("method") or "",
                 "Dataset / Evidence": p.get("dataset_or_evidence") or "",
@@ -337,10 +458,84 @@ with tab_dashboard:
 
         if table_search:
             search_lower = table_search.lower()
-            rows = [
-                r for r in rows
-                if any(search_lower in str(v).lower() for v in r.values())
-            ]
+            rows = [r for r in rows if any(search_lower in str(v).lower() for v in r.values())]
 
         st.markdown(f"*Showing {len(rows)} papers*")
         st.dataframe(rows, use_container_width=True, height=500)
+
+# ── Tab 3: Upload PDF ──────────────────────────────────────────────────────────
+with tab_upload:
+    st.subheader("Upload PDF")
+    st.caption("Upload a textbook or foundational paper directly into your research database.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+
+    if uploaded_file:
+        st.success(f"File loaded: {uploaded_file.name}")
+        st.divider()
+        st.markdown("#### Document metadata")
+        st.caption("Fill in the details below before uploading to the database.")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            title = st.text_input("Title *", placeholder="e.g. Theory of International Politics")
+            authors_raw = st.text_input("Authors *", placeholder="e.g. Kenneth Waltz, John Mearsheimer")
+            year = st.number_input("Year *", min_value=1900, max_value=2026, value=2000, step=1)
+            doi = st.text_input("DOI (optional)", placeholder="e.g. https://doi.org/10.xxxx")
+
+        with col2:
+            source_type = st.selectbox(
+                "Source type *",
+                options=["textbook", "foundational"],
+                format_func=lambda x: "Textbook" if x == "textbook" else "Foundational Paper",
+            )
+            geographic_focus = st.text_input("Geographic focus (optional)", placeholder="e.g. Global, United States, China")
+            research_design = st.text_input("Research design (optional)", placeholder="e.g. Theoretical framework")
+            method = st.selectbox(
+                "Method (optional)",
+                options=[""] + [
+                    "Case Study", "Comparative Case Study", "Process Tracing",
+                    "Historical Analysis", "Discourse Analysis", "Content Analysis",
+                    "Interview-Based Research", "Regression Analysis", "Time Series Analysis",
+                    "Event Study", "Survey / Experiment", "Formal Modeling / Game Theory",
+                    "Mixed Methods", "Systematic Literature Review", "Meta-Analysis",
+                    "Conceptual / Theoretical", "Policy Analysis", "Other",
+                ],
+            )
+
+        st.divider()
+
+        if st.button("Upload to database", type="primary", use_container_width=True):
+            if not title.strip():
+                st.error("Title is required.")
+            elif not authors_raw.strip():
+                st.error("Authors are required.")
+            else:
+                authors_list = [a.strip() for a in authors_raw.split(",") if a.strip()]
+
+                metadata = {
+                    "title": title.strip(),
+                    "authors": authors_list,
+                    "year": int(year),
+                    "doi": doi.strip() or None,
+                    "source_type": source_type,
+                    "geographic_focus": geographic_focus.strip() or None,
+                    "research_design": research_design.strip() or None,
+                    "method": method or None,
+                }
+
+                with st.spinner("Extracting text and creating embeddings — this may take several minutes for large PDFs..."):
+                    text = extract_text_from_pdf(uploaded_file)
+
+                    if not text or len(text) < 500:
+                        st.error("Could not extract readable text from this PDF. It may be scanned or image-based.")
+                    else:
+                        st.info(f"Extracted {len(text):,} characters from PDF. Creating chunks and embeddings...")
+                        saved, skipped = upload_pdf_to_supabase(text, metadata)
+
+                        if saved > 0:
+                            st.success(f"✅ Successfully uploaded **{saved} chunks** to the database. ({skipped} already existed and were skipped.)")
+                            st.balloons()
+                        else:
+                            st.warning("No new chunks were saved. The document may already be in the database.")
