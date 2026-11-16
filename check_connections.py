@@ -46,6 +46,12 @@ def check_openalex():
 
 def check_gmail():
     succeeded = False
+    password = os.environ["EMAIL_PASSWORD"].strip()
+    compact_password = "".join(password.split())
+    app_password_format = len(compact_password) == 16 and compact_password.isascii() and compact_password.isalpha()
+    print(f"Gmail: saved credential has Google app-password format = {app_password_format}.")
+    if app_password_format:
+        password = compact_password
     for port in (465, 587):
         stage = "connect"
         server = None
@@ -60,7 +66,7 @@ def check_gmail():
                 server.starttls(context=context)
                 server.ehlo()
             stage = "login"
-            server.login(os.environ["EMAIL_ADDRESS"].strip(), os.environ["EMAIL_PASSWORD"].strip())
+            server.login(os.environ["EMAIL_ADDRESS"].strip(), password, initial_response_ok=False)
             succeeded = True
             print(f"Gmail: port {port} encrypted SMTP login succeeded. No email was sent.")
         except smtplib.SMTPAuthenticationError as error:
