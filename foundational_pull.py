@@ -5,6 +5,7 @@ import json
 import tempfile
 import math
 import hashlib
+from storage_utils import clean_record
 
 import requests
 from openai import OpenAI
@@ -223,6 +224,7 @@ def save_chunks_to_supabase(paper_record, existing_chunk_ids):
         return 0
 
     saved = 0
+    failed = 0
     for index, (source_type, chunk) in enumerate(chunks_to_embed):
         chunk_id = create_chunk_id(
             paper_record.get("title"),
@@ -260,13 +262,16 @@ def save_chunks_to_supabase(paper_record, existing_chunk_ids):
         }
 
         try:
-            supabase.table("chunks").upsert(record).execute()
+            supabase.table("chunks").upsert(clean_record(record)).execute()
             existing_chunk_ids.add(chunk_id)
             saved += 1
             print(f"Saved {source_type} chunk {index}")
         except Exception as e:
             print(f"Failed to save chunk {index}: {e}")
+            failed += 1
 
+    if failed:
+        raise RuntimeError(f"{failed} chunks failed to save; saved {saved} successfully.")
     return saved
 
 
@@ -406,6 +411,25 @@ Paper text:
 
 # ── Main pipeline ──────────────────────────────────────────────────────────────
 
+def repair_existing_paper(title, pdf_url):
+    if not pdf_url.startswith("https://"):
+        raise ValueError("Repair requires an HTTPS PDF URL.")
+    rows = supabase.table("chunks").select("*").eq("title", title).eq("source_type", "abstract").limit(1).execute().data
+    if not rows:
+        raise ValueError("No stored abstract found for the requested paper.")
+    record = dict(rows[0])
+    record["abstract"] = record["chunk_text"]
+    record["full_text"] = extract_pdf_text(pdf_url)
+    if not record["full_text"]:
+        raise RuntimeError("Unable to extract the repair PDF.")
+    saved = save_chunks_to_supabase(record, load_existing_chunk_ids())
+    print(f"Repair complete: saved {saved} missing chunks for {title}.")
+
+
+if os.environ.get("REPAIR_PAPER_TITLE"):
+    repair_existing_paper(os.environ["REPAIR_PAPER_TITLE"], os.environ.get("REPAIR_PDF_URL", ""))
+    raise SystemExit(0)
+
 print("\n=== Foundational Paper Pull ===\n")
 print(f"Search topics: {len(SEARCH_TERMS)}")
 print(f"Year range: {YEAR_MIN}-{YEAR_MAX}")
@@ -417,6 +441,7 @@ print(f"\nExisting chunks in Supabase: {len(existing_chunk_ids)}")
 
 papers_processed = 0
 papers_skipped = 0
+papers_failed = 0
 
 for paper in papers:
     try:
@@ -501,8 +526,12 @@ for paper in papers:
 
     except Exception as e:
         print(f"    Error processing '{title}': {e}")
+        papers_failed += 1
         continue
 
 print(f"\n=== Done ===")
 print(f"Papers processed: {papers_processed}")
 print(f"Papers skipped (no text): {papers_skipped}")
+print(f"Papers failed: {papers_failed}")
+if papers_failed:
+    raise SystemExit(1)

@@ -6,6 +6,7 @@ import json
 import tempfile
 import math
 import hashlib
+from storage_utils import clean_record
 from email.mime.text import MIMEText
 
 import requests
@@ -397,9 +398,10 @@ def load_existing_chunk_ids():
 
 def save_chunk_to_supabase(chunk_record):
     try:
-        supabase.table("chunks").upsert(chunk_record).execute()
+        supabase.table("chunks").upsert(clean_record(chunk_record)).execute()
     except Exception as e:
         print(f"Failed to save chunk to Supabase: {e}")
+        raise
 
 
 def chunk_text(text, is_abstract=False, max_chars=3000, overlap_chars=300):

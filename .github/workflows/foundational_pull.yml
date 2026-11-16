@@ -3,6 +3,15 @@ name: Foundational Military AI Paper Pull
 
 on:
   workflow_dispatch:
+    inputs:
+      repair_paper_title:
+        description: Optional exact title of an existing paper to repair
+        type: string
+        default: ''
+      repair_pdf_url:
+        description: PDF URL for that paper (required for repair)
+        type: string
+        default: ''
 
 jobs:
   foundational-pull:
@@ -23,6 +32,8 @@ jobs:
 
       - name: Run foundational paper pull
         env:
+          REPAIR_PAPER_TITLE: ${{ inputs.repair_paper_title }}
+          REPAIR_PDF_URL: ${{ inputs.repair_pdf_url }}
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

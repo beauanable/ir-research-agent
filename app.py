@@ -8,6 +8,7 @@ from pypdf import PdfReader
 import hashlib
 import tempfile
 import os
+from storage_utils import clean_record
 
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -202,7 +203,7 @@ def upload_pdf_to_supabase(text, metadata):
         }
 
         try:
-            supabase.table("chunks").upsert(record).execute()
+            supabase.table("chunks").upsert(clean_record(record)).execute()
             saved += 1
         except Exception as e:
             st.warning(f"Failed to save chunk {index}: {e}")
