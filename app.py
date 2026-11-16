@@ -1,3 +1,4 @@
+from datetime import date
 import streamlit as st
 from collections import Counter
 from chat import answer_question, generate_landscape_report, generate_gap_analysis
@@ -14,13 +15,13 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 EMBEDDING_MODEL = "text-embedding-3-small"
 
 st.set_page_config(
-    page_title="IR Research Agent",
+    page_title="Military AI Research Agent",
     page_icon="📚",
     layout="wide"
 )
 
-st.title("📚 IR Research Agent")
-st.caption("Ask questions against your processed IR literature database.")
+st.title("📚 Military AI Research Agent")
+st.caption("Explore research on AI adoption and use in militaries worldwide. Answers cite your research library.")
 
 # ── Method normalisation ───────────────────────────────────────────────────────
 METHOD_NORMALISATION = {
@@ -214,14 +215,17 @@ with st.sidebar:
     st.header("Filter sources")
     st.caption("Narrow the database before searching. Leave blank to search everything.")
 
-    year_min = st.number_input("Year from", min_value=1950, max_value=2026, value=2024, step=1)
-    year_max = st.number_input("Year to", min_value=1950, max_value=2026, value=2026, step=1)
+    year_min = st.number_input("Year from", min_value=1950, max_value=date.today().year, value=1950, step=1)
+    year_max = st.number_input("Year to", min_value=1950, max_value=date.today().year, value=date.today().year, step=1)
+    if year_min > year_max:
+        st.error("The starting year must be no later than the ending year.")
+        st.stop()
     journal_filter = st.text_input("Journal (partial match)", placeholder="e.g. International Security")
     geo_filter = st.text_input("Geographic focus (partial match)", placeholder="e.g. China")
     method_filter = st.text_input("Method (partial match)", placeholder="e.g. case study")
 
     filters_active = any([journal_filter, geo_filter, method_filter])
-    year_filtered = year_min != 2024 or year_max != 2026
+    year_filtered = year_min != 1950 or year_max != date.today().year
 
     if filters_active or year_filtered:
         st.info("Filters active — search is narrowed.")
@@ -243,7 +247,7 @@ with st.sidebar:
 
     gap_input = st.text_area(
         "Your research interest",
-        placeholder="e.g. How New Zealand might position itself in great power competition through green compute infrastructure...",
+        placeholder="e.g. How do militaries compare in their adoption and oversight of AI decision support?",
         height=120,
     )
 
@@ -319,7 +323,7 @@ with tab_chat:
                         st.markdown(f"Chunk index: {source['chunk_index']}")
                         st.divider()
 
-    question = st.chat_input("Ask a research question...")
+    question = st.chat_input("Ask about military AI adoption, evidence, or governance...")
 
     if question:
         st.session_state.messages.append({"role": "user", "content": question})
@@ -330,7 +334,7 @@ with tab_chat:
                 answer, sources = answer_question(
                                 question,
                                 return_sources=True,
-                                filters=filters,
+                                filters=active_filters,
                                 conversation_history=st.session_state.get("messages", [])
                             )
                 st.markdown(answer)
@@ -486,7 +490,7 @@ with tab_upload:
         with col1:
             title = st.text_input("Title *", placeholder="e.g. Theory of International Politics")
             authors_raw = st.text_input("Authors *", placeholder="e.g. Kenneth Waltz, John Mearsheimer")
-            year = st.number_input("Year *", min_value=1900, max_value=2026, value=2000, step=1)
+            year = st.number_input("Year *", min_value=1900, max_value=date.today().year, value=2000, step=1)
             doi = st.text_input("DOI (optional)", placeholder="e.g. https://doi.org/10.xxxx")
 
         with col2:

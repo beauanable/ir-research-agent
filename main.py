@@ -1,3 +1,5 @@
+from research_focus import SEARCH_TERMS, RESEARCH_INSTRUCTIONS, is_military_ai_research
+from datetime import date
 import os
 import smtplib
 import json
@@ -29,86 +31,6 @@ OPENALEX_URL = "https://api.openalex.org/works"
 UNPAYWALL_URL = "https://api.unpaywall.org/v2"
 UNPAYWALL_EMAIL = os.environ["EMAIL_ADDRESS"]
 
-SEARCH_TERMS = [
-    # Core IR and geopolitics
-    "AI geopolitics",
-    "technology governance international relations",
-    "international political economy infrastructure",
-    "energy security geopolitics",
-    "deterrence theory",
-    "state capacity international relations",
-    "great power competition",
-    "critical infrastructure security",
-    "compute power geopolitics",
-    "data center geopolitics",
-    "semiconductor supply chains",
-    "AI infrastructure geopolitics",
-    "energy infrastructure great power competition",
-    "electric grid security geopolitics",
-    "critical minerals geopolitics",
-    "industrial policy semiconductors",
-    "cloud computing national security",
-    "strategic autonomy technology",
-    "renewable energy geopolitics",
-    "green industrial policy",
-    "climate geopolitics",
-    "energy transition political economy",
-    "China energy security",
-    "United States energy security",
-    "China renewable energy policy",
-    "United States renewable energy policy",
-    "critical minerals supply chains",
-    "technology sovereignty energy transition",
-    "strategic autonomy green transition",
-    "energy transition national identity",
-    "climate policy national identity",
-    "developmental state energy transition",
-    "AI compute governance",
-    "compute infrastructure state power",
-    "digital sovereignty",
-    "semiconductor industrial policy",
-    "cloud infrastructure geopolitics",
-    "AI infrastructure political economy",
-    "semiconductor geopolitics",
-    "semiconductor supply chains national security",
-    "AI infrastructure strategy",
-    "compute power state power",
-    "digital infrastructure geopolitics",
-    "data center infrastructure politics",
-    "technology sovereignty",
-    "strategic autonomy semiconductors",
-    "critical infrastructure resilience",
-    "geoeconomics of technology",
-
-    # New Zealand in great power competition
-    "New Zealand foreign policy China United States",
-    "New Zealand Five Eyes geopolitics",
-    "New Zealand strategic autonomy",
-    "New Zealand China relations",
-    "New Zealand United States alliance",
-    "Pacific Islands great power competition",
-    "AUKUS New Zealand",
-    "New Zealand Indo-Pacific policy",
-
-    # Small state and middle power strategy
-    "small state foreign policy great power competition",
-    "small state hedging strategy",
-    "middle power Indo-Pacific strategy",
-    "small state digital economy strategy",
-
-    # Green compute and sustainable infrastructure
-    "green data centers renewable energy geopolitics",
-    "sustainable compute infrastructure",
-    "renewable energy data centers national strategy",
-    "New Zealand renewable energy export",
-    "green hydrogen geopolitics",
-    "carbon neutral computing geopolitics",
-
-    # New Zealand economic positioning
-    "New Zealand trade China decoupling",
-    "New Zealand critical minerals",
-    "Pacific economic statecraft",
-]
 
 CORE_IR_JOURNALS = [
     "International Organization",
@@ -152,79 +74,8 @@ TIER_3_JOURNALS = [
     "The Washington Quarterly",
 ]
 
-STRATEGIC_KEYWORDS = [
-    "great power competition",
-    "strategic competition",
-    "industrial policy",
-    "compute infrastructure",
-    "data centers",
-    "data center",
-    "semiconductors",
-    "semiconductor",
-    "chip supply chain",
-    "semiconductor supply chain",
-    "energy infrastructure",
-    "critical infrastructure",
-    "ai governance",
-    "state capacity",
-    "technological sovereignty",
-    "supply chains",
-    "rare earths",
-    "critical minerals",
-    "grid security",
-    "grid resilience",
-    "electric grid",
-    "energy transition",
-    "geoeconomics",
-    "techno-nationalism",
-    "strategic autonomy",
-    "digital infrastructure",
-    "cloud computing",
-    "cloud infrastructure",
-    "ai race",
-    "national security",
-    "energy security",
-    "infrastructure resilience",
-    "compute power",
-    "technology competition",
-    "technology strategy",
-    "dual-use technology",
-    "strategic technology",
-    "energy geopolitics",
-    "energy statecraft",
-    "infrastructure geopolitics",
-    "new zealand",
-    "five eyes",
-    "aukus",
-    "indo-pacific",
-    "small state",
-    "middle power",
-    "pacific islands",
-    "green compute",
-    "green data center",
-    "renewable energy export",
-    "hedging strategy",
-    "economic statecraft",
-]
+STRATEGIC_KEYWORDS = ["artificial intelligence", "machine learning", "autonomous", "human oversight", "military", "defence", "defense", "governance", "decision support"]
 
-TECHNICAL_PENALTY_KEYWORDS = [
-    "algorithm",
-    "neural network",
-    "machine learning model",
-    "deep learning",
-    "cloud architecture",
-    "database",
-    "data management",
-    "software engineering",
-    "edge computing",
-    "internet of things",
-    "iot",
-    "smart city",
-    "digital twin",
-    "healthcare",
-    "medical",
-    "clinical",
-]
 
 GENERAL_IR_KEYWORDS = [
     "alliance",
@@ -435,20 +286,16 @@ def score_paper(paper, search_term):
     elif journal in CORE_IR_JOURNALS:
         score += 20
 
-    if year >= 2026:
+    if year >= date.today().year:
         score += 20
-    elif year == 2025:
+    elif year == date.today().year - 1:
         score += 15
-    elif year == 2024:
+    elif year == date.today().year - 2:
         score += 8
 
     score += min(cited_by_count, 100) / 5
     score += strategic_score
     score += ir_score
-
-    for keyword in TECHNICAL_PENALTY_KEYWORDS:
-        if keyword in combined_text.lower():
-            score -= 15
 
     for term_word in search_term.lower().split():
         if term_word in combined_text.lower():
@@ -463,38 +310,9 @@ def score_paper(paper, search_term):
 
 
 def should_include_paper(paper):
-    journal = get_journal(paper)
-    strategic_score = paper.get("strategic_score", 0)
-    ir_score = paper.get("ir_score", 0)
     title = paper.get("title") or ""
-    abstract_text = reconstruct_abstract(paper.get("abstract_inverted_index"))
-    combined_text = f"{title} {abstract_text}".lower()
-
-    if journal in CORE_IR_JOURNALS:
-        return True
-    if strategic_score >= 20 and ir_score >= 6:
-        return True
-
-    geopolitical_terms = [
-        "geopolitics", "geopolitical", "great power", "national security",
-        "state capacity", "industrial policy", "strategic competition",
-        "supply chain security", "technological sovereignty", "economic statecraft",
-        "international relations", "foreign policy", "new zealand", "five eyes",
-        "aukus", "indo-pacific", "small state", "middle power", "pacific islands",
-        "hedging", "green compute", "renewable energy export",
-    ]
-
-    if strategic_score >= 20:
-        for term in geopolitical_terms:
-            if term in combined_text:
-                return True
-
-    # Always include papers explicitly about New Zealand IR
-    nz_terms = ["new zealand", "aotearoa", "five eyes", "aukus"]
-    if any(term in combined_text for term in nz_terms) and ir_score >= 3:
-        return True
-
-    return False
+    abstract = reconstruct_abstract(paper.get("abstract_inverted_index"))
+    return is_military_ai_research(f"{title} {abstract}")
 
 
 def fetch_papers_for_search(search_term):
@@ -731,13 +549,12 @@ email_content = """
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.5; font-size: 14px;">
 
-<h2>Weekly IR Research Digest</h2>
+<h2>Weekly Military AI Research Digest</h2>
 
 <p><b>Selection Logic:</b><br>
-High-impact core IR journals are always prioritized.<br>
-Adjacent disciplines are included only if strongly related to great power strategy,
-energy infrastructure, compute power, state capacity, strategic technology,
-geopolitical competition, or New Zealand foreign policy.
+Papers must address both AI or autonomy and a military context.<br>
+Coverage includes adoption, intelligence, decision support, logistics, training,
+human oversight, governance, and strategic effects across countries.
 </p>
 
 <hr>
@@ -809,7 +626,7 @@ for paper in selected_papers:
         analysis_text = full_text if full_text else abstract_text
 
         prompt = f"""
-You are an elite international relations research assistant.
+{RESEARCH_INSTRUCTIONS}
 
 Return ONLY valid JSON with this exact structure:
 
@@ -845,12 +662,9 @@ In summary_html, use HTML paragraph formatting with bold labels using this struc
 <p><b>Main limitations:</b> ...</p>
 <p><b>Why this matters for IR scholars:</b> ...</p>
 
-Only include this final HTML section if the paper is strategically relevant to great power competition,
-energy infrastructure, compute power, AI governance, state capacity,
-industrial policy, technological competition, geopolitical strategy,
-or New Zealand foreign policy:
-
-<p><b>Why this matters for strategic infrastructure research:</b> ...</p>
+Use strategic_infrastructure_relevance for military AI applications and adoption.
+Use ir_scholars_relevance for implications for security and military AI scholarship.
+<p><b>Military AI applications and adoption:</b> ...</p>
 
 If the abstract or paper text does not clearly specify a category,
 explicitly say "Not clearly specified in available text."
@@ -984,7 +798,7 @@ sender = os.environ["EMAIL_ADDRESS"]
 password = os.environ["EMAIL_PASSWORD"]
 
 msg = MIMEText(email_content, "html")
-msg["Subject"] = "Weekly IR Research Digest"
+msg["Subject"] = "Weekly Military AI Research Digest"
 msg["From"] = sender
 msg["To"] = sender
 

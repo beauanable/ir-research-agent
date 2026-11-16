@@ -1,3 +1,5 @@
+from research_focus import SEARCH_TERMS, RESEARCH_INSTRUCTIONS, is_military_ai_research
+from datetime import date
 import os
 import json
 import tempfile
@@ -26,22 +28,10 @@ OPENALEX_URL = "https://api.openalex.org/works"
 UNPAYWALL_URL = "https://api.unpaywall.org/v2"
 UNPAYWALL_EMAIL = os.environ.get("EMAIL_ADDRESS", "research@example.com")
 
-TOP_IR_JOURNALS = [
-    "International Organization",
-    "International Security",
-    "World Politics",
-    "International Studies Quarterly",
-    "European Journal of International Relations",
-    "Review of International Political Economy",
-    "Security Studies",
-    "Journal of Conflict Resolution",
-    "International Affairs",
-    "Journal of Strategic Studies",
-]
 
 TOP_PAPERS_TO_PULL = 50
 YEAR_MIN = 2010
-YEAR_MAX = 2025
+YEAR_MAX = date.today().year
 
 METHOD_CATEGORIES = [
     "Case Study", "Comparative Case Study", "Process Tracing",
@@ -288,18 +278,14 @@ def get_journal_name(paper):
 
 
 def fetch_top_papers():
-    """
-    Fetch the top cited papers from top IR journals between YEAR_MIN and YEAR_MAX.
-    Searches each journal by name, fetches top results by citation count,
-    then filters in Python to confirm journal match.
-    """
+    """Find highly cited military AI research across journals and countries."""
     all_papers = []
 
-    for journal in TOP_IR_JOURNALS:
-        print(f"\nFetching from: {journal}")
+    for search_term in SEARCH_TERMS:
+        print(f"\nSearching: {search_term}")
         try:
             params = {
-                "search": journal,
+                "search": search_term,
                 "filter": (
                     f"from_publication_date:{YEAR_MIN}-01-01,"
                     f"to_publication_date:{YEAR_MAX}-12-31"
@@ -310,29 +296,24 @@ def fetch_top_papers():
             response = requests.get(OPENALEX_URL, params=params, timeout=30)
 
             if response.status_code != 200:
-                print(f"OpenAlex returned {response.status_code} for {journal}")
+                print(f"OpenAlex returned {response.status_code} for {search_term}")
                 continue
 
             data = response.json()
 
             if "results" not in data:
-                print(f"No results for {journal}")
+                print(f"No results for {search_term}")
                 continue
 
-            # Filter in Python to confirm journal match
-            journal_lower = journal.lower()
-            matched = []
             for paper in data["results"]:
-                paper_journal = get_journal_name(paper).lower()
-                if journal_lower in paper_journal or paper_journal in journal_lower:
-                    paper["_source_journal"] = journal
-                    matched.append(paper)
-
-            all_papers.extend(matched)
-            print(f"Found {len(matched)} confirmed papers from {journal} (out of {len(data['results'])} results)")
+                title = paper.get("title") or ""
+                abstract = reconstruct_abstract(paper.get("abstract_inverted_index"))
+                if is_military_ai_research(f"{title} {abstract}"):
+                    paper["_source_journal"] = get_journal_name(paper)
+                    all_papers.append(paper)
 
         except Exception as e:
-            print(f"Failed to fetch {journal}: {e}")
+            print(f"Failed to fetch {search_term}: {e}")
             continue
 
     # Deduplicate by DOI or title, keep highest citation count
@@ -359,7 +340,7 @@ def fetch_top_papers():
 
 def analyze_paper(title, journal, year, doi, cited_by_count, analysis_text, is_abstract_only):
     prompt = f"""
-You are an elite international relations research assistant.
+{RESEARCH_INSTRUCTIONS}
 
 Return ONLY valid JSON with this exact structure:
 
@@ -424,7 +405,7 @@ Paper text:
 # ── Main pipeline ──────────────────────────────────────────────────────────────
 
 print("\n=== Foundational Paper Pull ===\n")
-print(f"Journals: {len(TOP_IR_JOURNALS)}")
+print(f"Search topics: {len(SEARCH_TERMS)}")
 print(f"Year range: {YEAR_MIN}-{YEAR_MAX}")
 print(f"Target: top {TOP_PAPERS_TO_PULL} by citation count\n")
 

@@ -1,5 +1,5 @@
 # Runs every Monday at 15:00 UTC (8am Eastern / 7am Central)
-name: Run IR Research Agent
+name: Run Military AI Research Agent
 
 on:
   workflow_dispatch:

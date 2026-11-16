@@ -1,3 +1,4 @@
+from research_focus import SEARCH_TERMS, RESEARCH_INSTRUCTIONS, is_military_ai_research
 import json
 import math
 import os
@@ -14,16 +15,7 @@ ANSWER_MODEL = "gpt-4.1-mini"
 METADATA_BOOST_FIELDS = ["geographic_focus", "method", "research_design"]
 METADATA_BOOST_AMOUNT = 0.05
 
-_cached_chunks = None
-
-
 def load_chunks(filters=None):
-    global _cached_chunks
-
-    if not filters:
-        if _cached_chunks is not None:
-            return _cached_chunks
-
     try:
         query = supabase.table("chunks").select(
             "chunk_id, title, authors, journal, year, doi, chunk_index, chunk_text, "
@@ -43,13 +35,16 @@ def load_chunks(filters=None):
             if filters.get("method"):
                 query = query.ilike("method", f"%{filters['method']}%")
 
-        result = query.execute()
-
-        if not filters:
-            _cached_chunks = result.data
-            print(f"Loaded {len(_cached_chunks)} chunks from Supabase")
-
-        return result.data
+        # Page through the library so newly ingested research is searchable.
+        chunks = []
+        offset = 0
+        while True:
+            rows = query.order("chunk_id").range(offset, offset + 499).execute().data
+            if not rows:
+                break
+            chunks.extend(rows)
+            offset += len(rows)
+        return chunks
 
     except Exception as e:
         print(f"Failed to load chunks from Supabase: {e}")
@@ -118,7 +113,7 @@ def rerank_chunks(query, retrieved_results, top_k=5):
         })
 
     prompt = f"""
-You are reranking research paper chunks for an international relations research assistant.
+You are reranking research paper chunks for a researcher studying military uses of AI worldwide. Prioritize direct evidence about the requested application and country.
 
 User question:
 {query}
@@ -245,7 +240,7 @@ Previous conversation:
 """
 
         prompt = f"""
-You are an international relations research assistant writing for a graduate-level audience.
+{RESEARCH_INSTRUCTIONS}
 
 {history_section}
 Answer the user's current question using the numbered sources below.
@@ -329,9 +324,9 @@ def generate_landscape_report(filters=None):
         paper_list = json.dumps(papers, ensure_ascii=False, indent=2)
 
         prompt = f"""
-You are an elite international relations research analyst.
+{RESEARCH_INSTRUCTIONS}
 
-Below is a structured list of {len(papers)} research papers from a personal IR literature database.
+Below is a structured list of {len(papers)} research papers from a personal military AI research library, which also contains earlier IR background literature.
 Each entry includes the paper's title, journal, year, method, research design, dataset or evidence,
 geographic focus, unit of analysis, and identification strategy.
 
@@ -346,7 +341,7 @@ Generate a detailed, analytical research landscape report with the following sec
 ## 7. Apparent Gaps in the Literature
 
 Be specific and analytical throughout. Reference paper titles and journals where relevant.
-Write for a graduate-level IR scholar.
+Write for a graduate researcher studying military AI.
 
 Papers:
 {paper_list}
@@ -394,13 +389,14 @@ def generate_gap_analysis(research_interest, filters=None):
         paper_list = json.dumps(papers, ensure_ascii=False, indent=2)
 
         prompt = f"""
-You are an elite international relations research analyst helping a PhD student
+{RESEARCH_INSTRUCTIONS}
+Help a PhD student
 identify gaps in the existing literature relative to their research interest.
 
 The student's research interest is:
 \"\"\"{research_interest}\"\"\"
 
-Below is a structured list of {len(papers)} papers from their personal IR literature database.
+Below is a structured list of {len(papers)} papers from their personal military AI research library, which also contains earlier IR background literature.
 
 Generate a detailed gap analysis with the following sections:
 

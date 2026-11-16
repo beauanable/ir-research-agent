@@ -1,5 +1,5 @@
-# Run once manually to pull top 50 cited papers from top IR journals (2010-2025)
-name: Foundational Paper Pull
+# Run once manually to pull top 50 cited military AI papers since 2010
+name: Foundational Military AI Paper Pull
 
 on:
   workflow_dispatch:
