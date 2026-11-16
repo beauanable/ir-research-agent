@@ -23,8 +23,9 @@ jobs:
 
       - name: Run foundational paper pull
         env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
-        run: python foundational_pull.py
+        run: python -u foundational_pull.py

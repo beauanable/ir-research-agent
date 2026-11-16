@@ -317,8 +317,8 @@ def should_include_paper(paper):
 
 def fetch_papers_for_search(search_term):
     papers = []
-    cursor = "*"
-    pages_to_fetch = 3
+    # Basic paging supports this bounded search without cursor authentication.
+    pages_to_fetch = 6
 
     for page_number in range(pages_to_fetch):
         try:
@@ -326,9 +326,11 @@ def fetch_papers_for_search(search_term):
                 "filter": "from_publication_date:2024-01-01",
                 "search": search_term,
                 "sort": "cited_by_count:desc",
-                "per-page": 200,
-                "cursor": cursor,
+                "per_page": 100,
+                "page": page_number + 1,
             }
+            if os.environ.get("OPENALEX_API_KEY"):
+                params["api_key"] = os.environ["OPENALEX_API_KEY"]
             response = requests.get(OPENALEX_URL, params=params, timeout=30)
 
             if response.status_code != 200:
@@ -348,12 +350,11 @@ def fetch_papers_for_search(search_term):
                 if should_include_paper(paper):
                     papers.append(paper)
 
-            cursor = data.get("meta", {}).get("next_cursor")
-            if not cursor:
+            if len(data["results"]) < 100:
                 break
 
         except Exception as e:
-            print(f"OpenAlex fetch failed for '{search_term}' page {page_number + 1}: {e}")
+            print(f"OpenAlex fetch failed for '{search_term}' page {page_number + 1}: {type(e).__name__}")
             break
 
     return papers

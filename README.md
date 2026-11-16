@@ -16,4 +16,6 @@ Answers use the Supabase library and distinguish deployment evidence from trials
 
 The existing JSON field names are retained for database compatibility. In new digests, `strategic_infrastructure_relevance` describes military AI applications and adoption, and `ir_scholars_relevance` describes implications for security scholarship.
 
+To check connections, run **Run Military AI Research Agent** manually with **check_connections_only** selected. It tests a Supabase read, an OpenAlex search, and Gmail SMTP login. This mode sends no email and writes no research data. An optional GitHub Actions secret named `OPENALEX_API_KEY` increases the OpenAlex request budget. The weekly collector uses basic pagination with up to six pages of 100 results per search.
+
 Local validation covers Python syntax, topic selection, foundational discovery with mocked results, and paginated retrieval. Live OpenAI, Supabase, Gmail, and Streamlit verification requires the deployed environment.

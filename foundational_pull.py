@@ -291,8 +291,10 @@ def fetch_top_papers():
                     f"to_publication_date:{YEAR_MAX}-12-31"
                 ),
                 "sort": "cited_by_count:desc",
-                "per-page": 100,
+                "per_page": 100,
             }
+            if os.environ.get("OPENALEX_API_KEY"):
+                params["api_key"] = os.environ["OPENALEX_API_KEY"]
             response = requests.get(OPENALEX_URL, params=params, timeout=30)
 
             if response.status_code != 200:
@@ -313,7 +315,7 @@ def fetch_top_papers():
                     all_papers.append(paper)
 
         except Exception as e:
-            print(f"Failed to fetch {search_term}: {e}")
+            print(f"Failed to fetch {search_term}: {type(e).__name__}")
             continue
 
     # Deduplicate by DOI or title, keep highest citation count
